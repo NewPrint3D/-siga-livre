@@ -1,0 +1,1477 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <meta name="theme-color" content="#0a0e1a">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <title>Siga Livre</title>
+  <link rel="stylesheet" href="css/app.css">
+  <!-- Script mínimo de saída do splash — roda antes de qualquer biblioteca -->
+  <script>
+  (function(){
+    var _saiu = false;
+    function _sair(){
+      if(_saiu) return; _saiu = true;
+      var sp = document.getElementById('tela-splash');
+      if(sp){ sp.style.opacity='0'; sp.style.pointerEvents='none'; }
+      setTimeout(function(){
+        if(sp){ sp.style.display='none'; sp.classList.remove('ativa'); }
+        // Tenta chamar as funções do app; se não existirem, vai direto pro onboarding
+        var ok = false;
+        try {
+          if(typeof carregarPerfil==='function' && carregarPerfil() && typeof STATE!=='undefined' && STATE.perfil.nome){
+            var ta = document.getElementById('tela-app');
+            if(ta){ ta.classList.add('ativa'); ok=true; }
+            if(typeof atualizarDashboard==='function') atualizarDashboard();
+            if(typeof ativarTab==='function') ativarTab('dashboard');
+            var fab = document.getElementById('fab-modo-cond');
+            if(fab) fab.style.display = 'flex';
+            // Aplica tema salvo
+            try{ if(typeof _aplicarTema==='function') _aplicarTema(STATE.perfil.tema||'noite'); }catch(e){}
+            try{ if(typeof _sincTemaBtns==='function') _sincTemaBtns(); }catch(e){}
+          }
+        } catch(e){ console.error('app err:',e); }
+        if(!ok){
+          var to = document.getElementById('tela-onboarding');
+          if(to) to.classList.add('ativa');
+          try{ if(typeof iniciarOnboarding==='function') iniciarOnboarding(); }catch(e){}
+        }
+      }, 400);
+    }
+    document.addEventListener('DOMContentLoaded', function(){
+      var sp = document.getElementById('tela-splash');
+      if(sp) sp.onclick = _sair;
+      var hint = document.getElementById('splash-tap-hint');
+      if(hint){ hint.style.cursor='pointer'; hint.onclick = _sair; }
+      // Auto-sair após 10s — dá tempo de ler e clicar
+      setTimeout(_sair, 10000);
+    });
+  })();
+  </script>
+  <link rel="stylesheet" href="https://unpkg.com/animate.css@4.1.1/animate.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.css">
+</head>
+<body>
+
+<!-- ==================== SPLASH ==================== -->
+<div id="tela-splash" class="tela ativa">
+  <canvas id="splash-canvas"></canvas>
+  <div class="splash-city"></div>
+  <div class="splash-highway">
+    <div class="splash-lane-l"></div>
+    <div class="splash-lane-r"></div>
+  </div>
+  <div class="splash-road-glow"></div>
+  <div class="splash-content">
+    <div class="splash-car-wrap">
+      <!-- Porsche 911 (992) — silhueta fiel: fastback, faróis redondos, roda traseira maior -->
+      <svg class="splash-car-svg" viewBox="0 0 370 112" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="pBodyG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#1c3d7a"/>
+            <stop offset="55%" stop-color="#0d2046"/>
+            <stop offset="100%" stop-color="#070f1e"/>
+          </linearGradient>
+          <linearGradient id="pRoofG" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stop-color="#18326a"/>
+            <stop offset="100%" stop-color="#0a1830"/>
+          </linearGradient>
+          <linearGradient id="pGlassG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#0b2244" stop-opacity="0.75"/>
+            <stop offset="100%" stop-color="#020d1e" stop-opacity="0.92"/>
+          </linearGradient>
+          <radialGradient id="pWheelG" cx="50%" cy="50%" r="50%">
+            <stop offset="0%" stop-color="#182848"/>
+            <stop offset="65%" stop-color="#080e20"/>
+            <stop offset="100%" stop-color="#030810"/>
+          </radialGradient>
+          <radialGradient id="pRimShine" cx="35%" cy="30%" r="60%">
+            <stop offset="0%" stop-color="#2868b0" stop-opacity="0.6"/>
+            <stop offset="100%" stop-color="#00123a" stop-opacity="0.1"/>
+          </radialGradient>
+          <filter id="pGlow" x="-50%" y="-50%" width="200%" height="200%">
+            <feGaussianBlur stdDeviation="4" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="pgSm" x="-30%" y="-30%" width="160%" height="160%">
+            <feGaussianBlur stdDeviation="2" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+          <filter id="pgTail" x="-20%" y="-20%" width="140%" height="140%">
+            <feGaussianBlur stdDeviation="2.5" result="b"/>
+            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+          </filter>
+        </defs>
+
+        <!-- Reflexo no asfalto -->
+        <ellipse cx="188" cy="107" rx="168" ry="4.5" fill="rgba(0,212,255,0.09)"/>
+
+        <!-- ══════════════════════════════════════════
+             PORSCHE 911 (992) — frente para a DIREITA
+             Chão: y=106  |  Frente: x≈350  |  Traseira: x≈18
+             Roda traseira: cx=70, cy=87, r=19 (maior)
+             Roda dianteira: cx=300, cy=89, r=17 (menor)
+             Longarina/soleira: y≈73
+        ══════════════════════════════════════════ -->
+
+        <!-- ── Corpo inferior (soleira + pára-choques) ── -->
+        <path d="M 50 73 L 288 72
+                 Q 305 71 316 67
+                 Q 328 62 336 64
+                 Q 346 65 350 72
+                 L 346 81
+                 Q 328 83 312 83
+                 L 90 83
+                 Q 66 83 50 77 Z"
+              fill="url(#pBodyG)" stroke="#00d4ff" stroke-width="1.2"/>
+
+        <!-- ── Carroceria superior: fastback 911 — traseira MAIS ALTA que a frente ── -->
+        <!-- A silhueta flui da traseira (alta, motor) até a frente (baixa, sem motor) -->
+        <path d="M 50 73
+                 Q 36 69 28 63
+                 Q 20 56 22 49
+                 Q 28 42 44 39
+                 Q 60 36 78 34
+                 Q 105 25 142 16
+                 Q 175 10 210 10
+                 Q 238 10 258 20
+                 Q 270 29 276 46
+                 Q 281 57 286 70
+                 L 288 72 Z"
+              fill="url(#pRoofG)" stroke="#00d4ff" stroke-width="1.3"/>
+
+        <!-- ── Vidraça (greenhouse) — para-brisa extremamente inclinado ── -->
+        <path d="M 104 71
+                 Q 118 47 152 30
+                 Q 182 18 216 15
+                 Q 244 13 262 24
+                 Q 273 33 275 52
+                 L 274 71 Z"
+              fill="url(#pGlassG)" stroke="#0077aa" stroke-width="0.9" opacity="0.93"/>
+
+        <!-- Montante-B sutil (linha interna da janela lateral) -->
+        <line x1="190" y1="16" x2="208" y2="71" stroke="#04111e" stroke-width="4" opacity="0.55"/>
+        <!-- Reflexo leve no para-brisa -->
+        <path d="M 112 65 Q 128 42 158 28 Q 145 30 120 58" fill="none" stroke="white" stroke-width="0.9" opacity="0.09"/>
+
+        <!-- ── Tampa do motor traseiro + duto de ar ── -->
+        <!-- Elevação suave do capô traseiro — motor ar-resfriado atrás -->
+        <path d="M 24 47 Q 38 42 72 40 L 70 47 Q 38 49 25 54 Z"
+              fill="#050e1e" stroke="#00d4ff" stroke-width="0.8" opacity="0.88"/>
+        <line x1="32" y1="43" x2="31" y2="52" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
+        <line x1="41" y1="42" x2="40" y2="50" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
+        <line x1="50" y1="41" x2="50" y2="49" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
+        <line x1="59" y1="41" x2="59" y2="48" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
+
+        <!-- Protuberância do motor traseiro -->
+        <path d="M 28 62 Q 18 60 14 67 Q 12 74 17 79 L 38 79 L 38 62 Z"
+              fill="#081420" stroke="#00d4ff" stroke-width="0.9"/>
+
+        <!-- Aerofólio / duck-tail (992) -->
+        <path d="M 14 41 Q 24 36 55 36 L 55 40 Q 26 40 16 45 Z"
+              fill="#0c1c3e" stroke="#00d4ff" stroke-width="1"/>
+
+        <!-- ── Lanternas traseiras: faixa LED contínua (911 moderno) ── -->
+        <rect x="14" y="57" width="28" height="9" rx="2.5" fill="#880000" filter="url(#pgTail)"/>
+        <rect x="14" y="57" width="15" height="9" rx="2.5" fill="#ff2020" opacity="0.92"/>
+        <line x1="15" y1="61.5" x2="40" y2="61.5" stroke="#ff9999" stroke-width="0.7" opacity="0.3"/>
+
+        <!-- ── Farol REDONDO — assinatura inconfundível do Porsche 911 ── -->
+        <!-- Halo externo glow -->
+        <circle cx="342" cy="62" r="16" fill="rgba(0,212,255,0.11)" filter="url(#pGlow)"/>
+        <!-- Anel do farol (bezel) -->
+        <circle cx="342" cy="62" r="12" fill="#02070e" stroke="#00d4ff" stroke-width="2.8" filter="url(#pgSm)"/>
+        <!-- Espelho refletor interno -->
+        <circle cx="342" cy="62" r="7.5" fill="#05122c" stroke="#009ac8" stroke-width="0.8"/>
+        <!-- Ponto luminoso central -->
+        <circle cx="342" cy="62" r="4.5" fill="white" opacity="0.9"/>
+        <circle cx="340" cy="60" r="2" fill="white" opacity="0.45"/>
+        <!-- DRL circular pontilhado (halo ring) -->
+        <circle cx="342" cy="62" r="13.5" fill="none" stroke="#00d4ff" stroke-width="1.3"
+                opacity="0.55" stroke-dasharray="4.5 3"/>
+        <!-- Barra DRL acima do farol -->
+        <path d="M 326 49 Q 336 45 349 47 Q 344 44 334 43 Q 322 46 326 49 Z"
+              fill="#00d4ff" opacity="0.68" filter="url(#pgSm)"/>
+
+        <!-- Pára-choque dianteiro + splitter -->
+        <path d="M 310 79 L 346 76 L 350 83 L 310 83 Z"
+              fill="#030810" stroke="#00d4ff" stroke-width="0.7" opacity="0.82"/>
+        <line x1="318" y1="79" x2="318" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
+        <line x1="326" y1="78" x2="326" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
+        <line x1="334" y1="78" x2="334" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
+        <line x1="342" y1="78" x2="342" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
+
+        <!-- Espelho retrovisor esportivo -->
+        <path d="M 283 54 L 277 57 L 275 63 L 288 62 Z"
+              fill="#0c1e44" stroke="#00d4ff" stroke-width="0.8"/>
+
+        <!-- Linha de cintura (character line) -->
+        <path d="M 40 64 Q 100 63 272 62 Q 290 61 306 59"
+              fill="none" stroke="#00d4ff" stroke-width="0.6" opacity="0.26"/>
+
+        <!-- ── RODA TRASEIRA (maior — 305/30 R20 no 911) ── -->
+        <!-- Paralama traseiro alargado (flared fender) -->
+        <path d="M 42 81 Q 46 58 70 52 Q 92 48 112 57 Q 122 64 124 81 Z"
+              fill="url(#pBodyG)" stroke="#00d4ff" stroke-width="0.9"/>
+        <!-- Pneu -->
+        <circle cx="70" cy="87" r="21" fill="#030810" stroke="#00d4ff" stroke-width="2.2"/>
+        <circle cx="70" cy="87" r="21" fill="none" stroke="#0b1830" stroke-width="5.5"/>
+        <!-- Aro / rim -->
+        <circle cx="70" cy="87" r="15.5" fill="url(#pWheelG)" stroke="#183060" stroke-width="1"/>
+        <circle cx="70" cy="87" r="15.5" fill="url(#pRimShine)"/>
+        <!-- 5 raios Porsche (ângulos: 90°,162°,234°,306°,18° = 0°,72°,144°,216°,288° a partir do topo) -->
+        <g transform="translate(70,87)" stroke="#00bcd8" stroke-linecap="round">
+          <!-- Raio 1: 12h -->
+          <line x1="0" y1="0" x2="0" y2="-15.5" stroke-width="3.2" opacity="0.75"/>
+          <!-- Raio 2: 72° -->
+          <line x1="0" y1="0" x2="14.7" y2="-4.8" stroke-width="3.2" opacity="0.75"/>
+          <!-- Raio 3: 144° -->
+          <line x1="0" y1="0" x2="9.1" y2="12.6" stroke-width="3.2" opacity="0.75"/>
+          <!-- Raio 4: 216° -->
+          <line x1="0" y1="0" x2="-9.1" y2="12.6" stroke-width="3.2" opacity="0.75"/>
+          <!-- Raio 5: 288° -->
+          <line x1="0" y1="0" x2="-14.7" y2="-4.8" stroke-width="3.2" opacity="0.75"/>
+        </g>
+        <!-- Freio a disco visível entre os raios -->
+        <circle cx="70" cy="87" r="8.5" fill="none" stroke="#1a2c50" stroke-width="2" opacity="0.65"/>
+        <!-- Calota central Porsche -->
+        <circle cx="70" cy="87" r="5" fill="#040c20" stroke="#00d4ff" stroke-width="1.3"/>
+        <circle cx="70" cy="87" r="2.5" fill="#00d4ff" opacity="0.72"/>
+        <!-- Reflexo no pneu -->
+        <path d="M 54 73 Q 58 69 64 69 Q 58 75 52 78"
+              fill="none" stroke="white" stroke-width="0.8" opacity="0.12"/>
+
+        <!-- ── RODA DIANTEIRA (menor — 235/35 R20) ── -->
+        <!-- Paralama dianteiro -->
+        <path d="M 275 81 Q 279 60 300 54 Q 317 50 328 59 Q 335 65 337 81 Z"
+              fill="url(#pBodyG)" stroke="#00d4ff" stroke-width="0.9"/>
+        <!-- Pneu -->
+        <circle cx="300" cy="89" r="18" fill="#030810" stroke="#00d4ff" stroke-width="2"/>
+        <circle cx="300" cy="89" r="18" fill="none" stroke="#0b1830" stroke-width="4.5"/>
+        <!-- Aro -->
+        <circle cx="300" cy="89" r="13" fill="url(#pWheelG)" stroke="#183060" stroke-width="1"/>
+        <circle cx="300" cy="89" r="13" fill="url(#pRimShine)"/>
+        <!-- 5 raios (escala proporcional menor) -->
+        <g transform="translate(300,89)" stroke="#00bcd8" stroke-linecap="round">
+          <line x1="0" y1="0" x2="0" y2="-13" stroke-width="2.7" opacity="0.75"/>
+          <line x1="0" y1="0" x2="12.4" y2="-4.0" stroke-width="2.7" opacity="0.75"/>
+          <line x1="0" y1="0" x2="7.6" y2="10.5" stroke-width="2.7" opacity="0.75"/>
+          <line x1="0" y1="0" x2="-7.6" y2="10.5" stroke-width="2.7" opacity="0.75"/>
+          <line x1="0" y1="0" x2="-12.4" y2="-4.0" stroke-width="2.7" opacity="0.75"/>
+        </g>
+        <circle cx="300" cy="89" r="7" fill="none" stroke="#1a2c50" stroke-width="1.5" opacity="0.65"/>
+        <circle cx="300" cy="89" r="4.5" fill="#040c20" stroke="#00d4ff" stroke-width="1.1"/>
+        <circle cx="300" cy="89" r="2" fill="#00d4ff" opacity="0.72"/>
+
+        <!-- ── Escapamentos duplos (posicionados no pára-choque traseiro) ── -->
+        <ellipse cx="26" cy="91" rx="5.5" ry="3.8" fill="#07101e" stroke="#1a2230" stroke-width="1"/>
+        <ellipse cx="26" cy="91" rx="3" ry="2" fill="#030810"/>
+        <ellipse cx="40" cy="91" rx="5.5" ry="3.8" fill="#07101e" stroke="#1a2230" stroke-width="1"/>
+        <ellipse cx="40" cy="91" rx="3" ry="2" fill="#030810"/>
+        <!-- Glow sutil do escapamento -->
+        <ellipse cx="26" cy="91" rx="7" ry="5" fill="rgba(0,160,210,0.07)"/>
+        <ellipse cx="40" cy="91" rx="7" ry="5" fill="rgba(0,160,210,0.07)"/>
+      </svg>
+      <div class="splash-beam"></div>
+      <div class="splash-dust"></div>
+    </div>
+    <div class="splash-nome" data-i18n="app.nomeMaiusculo">SIGA LIVRE</div>
+    <div class="splash-sub" data-i18n="splash.sub">Seu assistente de trânsito com IA</div>
+    <div class="splash-dots-row">
+      <span class="splash-dot-pulse"></span>
+      <span class="splash-dot-pulse" style="animation-delay:.2s"></span>
+      <span class="splash-dot-pulse" style="animation-delay:.4s"></span>
+    </div>
+    <div id="splash-tap-hint" data-i18n="splash.tap" style="color:var(--muted);font-size:0.72em;margin-top:6px;opacity:0;animation:fade-up 0.5s 1.8s ease-out both;">
+      toque para continuar
+    </div>
+  </div>
+</div>
+
+<!-- ==================== ONBOARDING ==================== -->
+<div id="tela-onboarding" class="tela">
+  <div class="obd-top" id="obd-top">
+    <div class="obd-bg-glow" id="obd-glow"></div>
+    <div class="obd-icon-ring">
+      <div class="obd-icon-ring-inner">
+        <div id="slide-icon" class="obd-icon">🚗</div>
+      </div>
+    </div>
+  </div>
+  <div class="obd-bottom">
+    <div class="obd-dots-row" id="obd-dots">
+      <span class="obd-dot ativa"></span>
+      <span class="obd-dot"></span>
+      <span class="obd-dot"></span>
+    </div>
+    <div id="slide-titulo" class="obd-titulo">Título</div>
+    <div id="slide-texto" class="obd-texto">Texto do slide</div>
+    <div class="obd-btns">
+      <button id="btn-voltar-slide" class="btn btn-secondary" onclick="voltarSlide()" style="display:none;">←</button>
+      <button id="btn-proximo-slide" class="btn btn-primary" style="flex:1" onclick="proximoSlide()">Próximo →</button>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== SETUP ==================== -->
+<div id="tela-setup" class="tela">
+  <div class="setup-header">
+    <h2 data-i18n="setup.titulo">⚙️ Configuração inicial</h2>
+    <div class="progress-bar"><div class="progress-fill" id="setup-progress"></div></div>
+  </div>
+
+  <div class="setup-body">
+
+    <!-- PASSO 1: Perfil -->
+    <div id="setup-perfil" class="setup-passo">
+      <div style="font-size:2.5em;text-align:center;margin-bottom:16px;">👤</div>
+      <h3 data-i18n="setup.perfil.titulo" style="text-align:center;color:var(--cyan);margin-bottom:20px;">Como posso te chamar?</h3>
+      <div class="input-group">
+        <label data-i18n="setup.perfil.nome">Seu nome</label>
+        <input type="text" id="inp-nome" data-i18n-ph="setup.perfil.nomePh" placeholder="Ex: Wesley" maxlength="40">
+      </div>
+      <div class="input-group">
+        <label data-i18n="setup.perfil.whatsapp">WhatsApp (opcional — para alertas)</label>
+        <input type="tel" id="inp-fone" data-i18n-ph="setup.perfil.whatsappPh" placeholder="(61) 9 0000-0000" maxlength="20">
+      </div>
+    </div>
+
+    <!-- PASSO 2: Localização + Rotas -->
+    <div id="setup-rotas" class="setup-passo">
+      <div style="font-size:2.5em;text-align:center;margin-bottom:8px;">🗺️</div>
+      <h3 data-i18n="setup.rotas.titulo" style="text-align:center;color:var(--cyan);margin-bottom:4px;">Suas rotas</h3>
+      <p data-i18n="setup.rotas.sub" style="text-align:center;color:var(--muted);font-size:0.82em;margin-bottom:18px;">Configure sua cidade e seus trajetos habituais</p>
+
+      <!-- Localização -->
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;margin-bottom:16px;border:1px solid var(--border);">
+        <div data-i18n="setup.rotas.ondeMora" style="font-size:0.8em;color:var(--cyan);font-weight:700;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">📍 Onde você mora</div>
+        <div class="input-group" style="margin-bottom:10px">
+          <label data-i18n="setup.rotas.pais">País</label>
+          <select id="sel-pais"></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="input-group" style="margin-bottom:0">
+            <label data-i18n="setup.rotas.estado">Estado</label>
+            <select id="sel-estado"></select>
+          </div>
+          <div class="input-group" style="margin-bottom:0">
+            <label data-i18n="setup.rotas.cidade">Cidade</label>
+            <select id="sel-cidade"></select>
+            <input type="text" id="inp-cidade-outra" data-i18n-ph="setup.rotas.cidadePh" placeholder="Digite o nome da cidade" list="cidades-sugeridas" style="display:none;margin-top:6px;">
+            <datalist id="cidades-sugeridas"></datalist>
+          </div>
+        </div>
+        <div class="input-group" style="margin-top:10px;margin-bottom:0">
+          <label data-i18n="setup.rotas.bairro">Bairro / Região</label>
+          <select id="sel-bairro"></select>
+          <input type="text" id="inp-bairro-outra" data-i18n-ph="setup.rotas.bairroPh" placeholder="Digite o nome do bairro" list="bairros-sugeridos" style="display:none;margin-top:6px;">
+          <datalist id="bairros-sugeridos"></datalist>
+        </div>
+      </div>
+
+      <!-- Tipo de veículo -->
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;margin-bottom:16px;border:1px solid var(--border);">
+        <div data-i18n="setup.rotas.veiculo.titulo" style="font-size:0.8em;color:var(--cyan);font-weight:700;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">🚗 Tipo de veículo</div>
+        <div id="cards-veiculo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+        <div id="grupo-dimensoes-veiculo" style="display:none;margin-top:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="input-group" style="margin-bottom:10px">
+              <label data-i18n="setup.rotas.veiculo.altura">Altura (m)</label>
+              <input type="number" id="inp-veiculo-altura" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.alturaPh" placeholder="Ex: 4.0">
+            </div>
+            <div class="input-group" style="margin-bottom:10px">
+              <label data-i18n="setup.rotas.veiculo.largura">Largura (m)</label>
+              <input type="number" id="inp-veiculo-largura" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.larguraPh" placeholder="Ex: 2.5">
+            </div>
+            <div class="input-group" style="margin-bottom:0">
+              <label data-i18n="setup.rotas.veiculo.comprimento">Comprimento (m)</label>
+              <input type="number" id="inp-veiculo-comprimento" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.comprimentoPh" placeholder="Ex: 16.5">
+            </div>
+            <div class="input-group" style="margin-bottom:0">
+              <label data-i18n="setup.rotas.veiculo.peso">Peso total (t)</label>
+              <input type="number" id="inp-veiculo-peso" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.pesoPh" placeholder="Ex: 40">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Rota Habitual -->
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid var(--cyan);border-left-width:3px;">
+        <div data-i18n="setup.rotas.rotaHabitual" style="font-size:0.8em;color:var(--cyan);font-weight:700;margin-bottom:12px;text-transform:uppercase;letter-spacing:1px;">🏠→🏢 Rota Habitual (dia a dia)</div>
+        <div class="input-group" style="margin-bottom:10px">
+          <label data-i18n="setup.rotas.deOnde">De onde você sai</label>
+          <input type="text" id="inp-origem-hab" data-i18n-ph="setup.rotas.deOndePh" placeholder="Bairro ou endereço de saída" list="bairros-sugeridos" autocomplete="off">
+        </div>
+        <div class="input-group" style="margin-bottom:10px">
+          <label data-i18n="setup.rotas.paraOnde">Para onde vai</label>
+          <input type="text" id="inp-destino-hab" data-i18n-ph="setup.rotas.paraOndePh" placeholder="Bairro ou endereço de destino" list="bairros-sugeridos" autocomplete="off">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="input-group" style="margin-bottom:0">
+            <label data-i18n="setup.rotas.saidaCasa">🌅 Saída de casa</label>
+            <input type="time" id="inp-volta" value="07:00">
+          </div>
+          <div class="input-group" style="margin-bottom:0">
+            <label data-i18n="setup.rotas.saidaTrabalho">⏰ Saída do trabalho</label>
+            <input type="time" id="inp-saida" value="17:30">
+          </div>
+        </div>
+      </div>
+
+      <!-- Rota Alternativa -->
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;margin-bottom:12px;border:1px solid rgba(255,107,53,0.4);border-left:3px solid var(--orange);">
+        <div data-i18n="setup.rotas.rotaAlt" style="font-size:0.8em;color:var(--orange);font-weight:700;margin-bottom:4px;text-transform:uppercase;letter-spacing:1px;">🔀 Rota Alternativa (fim de semana / lazer)</div>
+        <div data-i18n="setup.rotas.rotaAltSub" style="font-size:0.76em;color:var(--muted);margin-bottom:10px;">Opcional — para quando for a outro lugar</div>
+        <div class="input-group" style="margin-bottom:10px">
+          <label data-i18n="setup.rotas.altDeOnde">De onde sai</label>
+          <input type="text" id="inp-origem-alt" data-i18n-ph="setup.rotas.opcionalPh" placeholder="Opcional" list="bairros-sugeridos">
+        </div>
+        <div class="input-group" style="margin-bottom:0">
+          <label data-i18n="setup.rotas.altParaOnde">Para onde vai</label>
+          <input type="text" id="inp-destino-alt" data-i18n-ph="setup.rotas.opcionalPh" placeholder="Opcional" list="bairros-sugeridos">
+        </div>
+      </div>
+
+      <!-- Preferências durante rota -->
+      <div style="background:var(--bg3);border-radius:12px;padding:14px;border:1px solid var(--border);">
+        <div data-i18n="setup.rotas.alertas" style="font-size:0.8em;color:var(--yellow);font-weight:700;margin-bottom:14px;text-transform:uppercase;letter-spacing:1px;">⛽ Alertas e Promoções durante o trajeto</div>
+
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label" data-i18n="setup.rotas.combustivel">Preços de combustível</div>
+            <div class="toggle-sub" data-i18n="setup.rotas.combustivelSub">Postos num raio de 2km durante a rota</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="tog-combustivel" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div class="toggle-row" style="margin-bottom:0">
+          <div>
+            <div class="toggle-label" data-i18n="setup.rotas.parceiros">Promoções de parceiros</div>
+            <div class="toggle-sub" data-i18n="setup.rotas.parceirosSub">Ofertas de comércios no seu caminho</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="tog-parceiros" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <!-- PASSO 3: Voz (4 sub-passos) -->
+    <div id="setup-voz" class="setup-passo">
+      <div class="voz-progress">
+        <div class="voz-progress-bar-wrap"><div id="voz-progress-bar"></div></div>
+        <span id="voz-progress-num">1 de 4</span>
+      </div>
+
+      <!-- 3a: Gênero -->
+      <div id="voz-genero" class="voz-passo">
+        <div style="font-size:2em;text-align:center;margin-bottom:8px;">🎙️</div>
+        <div class="voz-titulo" data-i18n="setup.voz.genero.titulo" style="text-align:center;">Voz do seu agente</div>
+        <div class="voz-sub" data-i18n="setup.voz.genero.sub" style="text-align:center;">Masculina ou feminina?</div>
+        <div class="cards-grid" id="cards-genero"></div>
+        <button class="btn btn-secondary btn-full" data-i18n="setup.voz.genero.previa" style="margin-top:14px;" onclick="ouvirPrevia()">🔊 Ouvir prévia</button>
+      </div>
+
+      <!-- 3b: Sotaque -->
+      <div id="voz-sotaque" class="voz-passo">
+        <div style="font-size:2em;text-align:center;margin-bottom:8px;">🗺️</div>
+        <div class="voz-titulo" data-i18n="setup.voz.sotaque.titulo" style="text-align:center;">Sotaque regional</div>
+        <div class="voz-sub" data-i18n="setup.voz.sotaque.sub" style="text-align:center;">Qual região do Brasil você prefere?</div>
+        <div class="cards-grid cols3" id="cards-sotaque"></div>
+      </div>
+
+      <!-- 3c: Humor -->
+      <div id="voz-humor" class="voz-passo">
+        <div style="font-size:2em;text-align:center;margin-bottom:8px;">😄</div>
+        <div class="voz-titulo" data-i18n="setup.voz.humor.titulo" style="text-align:center;">Estado de ânimo</div>
+        <div class="voz-sub" data-i18n="setup.voz.humor.sub" style="text-align:center;">Como você quer que o agente fale?</div>
+        <div class="cards-grid" id="cards-humor"></div>
+      </div>
+
+      <!-- 3d: Profissão -->
+      <div id="voz-profissao" class="voz-passo">
+        <div style="font-size:2em;text-align:center;margin-bottom:8px;">👤</div>
+        <div class="voz-titulo" data-i18n="setup.voz.profissao.titulo" style="text-align:center;">Perfil profissional</div>
+        <div class="voz-sub" data-i18n="setup.voz.profissao.sub" style="text-align:center;">O agente adapta o vocabulário à sua área</div>
+        <div class="cards-grid cols3" id="cards-profissao"></div>
+        <button class="btn btn-secondary btn-full" data-i18n="setup.voz.profissao.previa" style="margin-top:14px;" onclick="ouvirPrevia()">🔊 Ouvir prévia com esse perfil</button>
+      </div>
+
+      <!-- Botões do wizard de voz -->
+      <div style="display:flex;gap:12px;margin-top:20px;">
+        <button id="btn-voz-voltar" class="btn btn-secondary" data-i18n="voz.voltar" onclick="vozVoltar()" style="display:none;">← Voltar</button>
+        <button id="btn-voz-proximo" class="btn btn-primary" style="flex:1;" onclick="vozProximo()">Próximo →</button>
+      </div>
+    </div>
+
+  </div><!-- /setup-body -->
+
+  <div class="setup-footer">
+    <button class="btn btn-secondary" data-i18n="setup.footer.voltar" onclick="setupVoltar()">← Voltar</button>
+    <button class="btn btn-primary" data-i18n="setup.footer.proximo" onclick="setupProximo()" id="btn-setup-proximo">
+      Próximo →
+    </button>
+  </div>
+</div><!-- /tela-setup -->
+
+<!-- ==================== APP PRINCIPAL ==================== -->
+<div id="tela-app" class="tela">
+
+  <!-- Top bar -->
+  <div class="app-topbar">
+    <div class="topbar-logo-svg">
+      <svg class="topbar-car-icon" viewBox="0 0 60 28" xmlns="http://www.w3.org/2000/svg">
+        <rect x="4" y="14" width="52" height="10" rx="3" fill="#0d1e3d" stroke="#00d4ff" stroke-width="1"/>
+        <path d="M14 14 Q20 5 28 4 Q40 3 48 14 Z" fill="#0d1e3d" stroke="#00d4ff" stroke-width="1"/>
+        <rect x="18" y="5" width="12" height="8" rx="2" fill="#040f1e" stroke="#00b4d8" stroke-width="0.7"/>
+        <rect x="33" y="6" width="12" height="7" rx="2" fill="#040f1e" stroke="#00b4d8" stroke-width="0.7"/>
+        <ellipse cx="55" cy="18" rx="3" ry="2" fill="#00d4ff" opacity="0.9"/>
+        <rect x="4" y="16" width="4" height="3" rx="1" fill="#cc1111"/>
+        <circle cx="16" cy="24" r="4" fill="#0a0e1a" stroke="#00d4ff" stroke-width="1.2"/>
+        <circle cx="16" cy="24" r="2" fill="#111"/>
+        <circle cx="46" cy="24" r="4" fill="#0a0e1a" stroke="#00d4ff" stroke-width="1.2"/>
+        <circle cx="46" cy="24" r="2" fill="#111"/>
+      </svg>
+      <span data-i18n="app.nomeMaiusculo">SIGA LIVRE</span>
+    </div>
+    <div style="display:flex;align-items:center;gap:8px;">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:1px;cursor:pointer;" onclick="toggleTemaRapido()" title="Modo Dia/Noite">
+        <span style="color:var(--muted);font-size:0.58em;white-space:nowrap;letter-spacing:0.02em;" data-i18n="topbar.dianoite">Dia/Noite</span>
+        <button id="btn-tema-topbar" style="background:none;border:none;cursor:pointer;font-size:1.15em;line-height:1;padding:0;">🌙</button>
+      </div>
+      <span id="relogio" style="color:var(--muted);font-size:0.88em;">--:--</span>
+      <div style="border-left:1px solid var(--border);padding-left:10px;display:flex;flex-direction:column;align-items:flex-end;gap:0px;min-width:90px;">
+        <button id="top-cidade" onclick="abrirSeletorRegiao()" title="Trocar região" style="background:none;border:none;cursor:pointer;color:var(--muted);font-size:0.7em;white-space:nowrap;overflow:hidden;max-width:108px;text-overflow:ellipsis;text-decoration:underline dotted;padding:0;text-align:right;"></button>
+        <span id="top-temp" style="color:var(--cyan);font-size:0.95em;font-weight:700;line-height:1.1;">--°C</span>
+        <span id="top-sens" style="color:var(--muted);font-size:0.62em;white-space:nowrap;">Sensação --°C</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Conteúdo das tabs -->
+  <div class="app-body">
+
+    <!-- ===== TAB DASHBOARD ===== -->
+    <div id="tab-dashboard" class="tab-content ativa">
+
+      <!-- Saudação -->
+      <div class="card" style="background:linear-gradient(135deg,var(--bg2),var(--bg3));border-color:var(--border);padding:14px 16px;">
+        <div id="saudacao" style="font-size:1.1em;font-weight:700;" data-i18n="dash.ola">Olá! 👋</div>
+        <div style="color:var(--muted);font-size:0.8em;margin-top:3px;" id="saudacao-cidade" data-i18n="dash.monitorando">Monitorando o trânsito em tempo real</div>
+      </div>
+
+      <!-- Seletor de rota -->
+      <div class="rota-selector">
+        <button class="rota-selector-btn ativa" id="btn-rota-hab"
+          onclick="selecionarTipoRota('habitual')" data-i18n="dash.rotaHabitual">🏠 Habitual</button>
+        <button class="rota-selector-btn" id="btn-rota-alt"
+          onclick="selecionarTipoRota('alternativa')" data-i18n="dash.rotaAlternativa">🔀 Alternativa</button>
+        <button class="rota-selector-btn" id="btn-rota-livre"
+          onclick="selecionarTipoRota('livre')" data-i18n="dash.rotaIrPara">📍 Ir para...</button>
+      </div>
+
+      <!-- Card: Sua rota agora (clique para expandir o agente). Some até o usuário informar uma rota -->
+      <div class="card" id="card-rota" onclick="toggleAgenteDash()" style="cursor:pointer;display:none;">
+        <div class="card-rota-header">
+          <div>
+            <div class="card-titulo" style="margin-bottom:4px;" data-i18n="dash.suaRotaAgora">📍 Sua rota agora</div>
+            <div id="rota-label-topo" style="font-size:0.8em;color:var(--muted);margin-bottom:8px;"></div>
+          </div>
+          <span class="card-rota-arrow" id="rota-arrow">▼</span>
+        </div>
+        <div id="status-barra" class="status-barra" data-i18n="dash.calculando">Calculando...</div>
+        <div class="status-detalhes">
+          <div class="status-item">
+            <span class="status-item-label" data-i18n="dash.tempoEstimado">Tempo estimado</span>
+            <span class="status-item-value" id="status-tempo">-- min</span>
+          </div>
+          <div class="status-item">
+            <span class="status-item-label" data-i18n="dash.viaPrincipal">Via principal</span>
+            <span class="status-item-value" id="status-rota" style="font-size:0.85em;">--</span>
+          </div>
+        </div>
+        <!-- Incidente clicável -->
+        <div id="status-incidente" style="display:none;"></div>
+
+        <!-- Agente expandido (aparece ao clicar no card) -->
+        <div class="card-agente-expandido" id="agente-expandido">
+          <div class="agent-dash-header" style="margin-bottom:8px;">
+            <div class="agent-avatar" style="width:28px;height:28px;font-size:0.9em;">
+              <i data-lucide="bot" style="width:16px;height:16px;"></i>
+            </div>
+            <div>
+              <div class="agent-name" style="font-size:0.9em;" data-i18n="dash.agenteNome">Agente Siga Livre</div>
+              <div class="agent-status" data-i18n="dash.agenteOnline">● Online</div>
+            </div>
+          </div>
+          <div id="agent-msg-dash" style="color:var(--text);line-height:1.6;font-size:0.92em;margin-bottom:12px;" data-i18n="dash.analisando">
+            Analisando o trânsito para você...
+          </div>
+          <button class="btn-ouvir" id="btn-ouvir" onclick="event.stopPropagation();ouvirAgente();SOUNDS.click()">
+            <i data-lucide="volume-2" style="width:18px;height:18px;"></i>
+            <span data-i18n="dash.ouvirAgente">Ouvir o agente</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Alertas combustível / parceiros (aparece quando ativo) -->
+      <div id="alertas-container"></div>
+
+      <!-- Preços de combustível em tempo real -->
+      <div class="card" id="card-combustivel" style="padding:14px 16px;">
+        <div class="card-titulo" id="comb-titulo" style="margin-bottom:10px;">⛽ Preços de Combustível</div>
+        <div id="comb-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;"></div>
+        <div id="comb-fonte" style="font-size:0.68em;color:var(--muted);margin-top:8px;text-align:right;"></div>
+      </div>
+
+      <!-- Previsão próximos 60 min -->
+      <div class="card">
+        <div class="card-titulo" data-i18n="dash.previsaoTitulo">📅 Previsão — próximos 60 min</div>
+        <div class="previsao-grid" id="previsao-grid"></div>
+      </div>
+
+      <!-- Atalho para chat -->
+      <div class="card" style="text-align:center;padding:18px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;">
+          <div class="agent-avatar" style="flex-shrink:0;">
+            <i data-lucide="message-circle" style="width:18px;height:18px;"></i>
+          </div>
+          <div style="text-align:left;">
+            <div style="font-weight:700;font-size:0.9em;" data-i18n="dash.faleComAgente">Fale com o agente</div>
+            <div style="color:var(--muted);font-size:0.78em;" data-i18n="dash.faleComAgenteSub">Tire dúvidas, peça alternativas, converse</div>
+          </div>
+        </div>
+        <button class="btn btn-primary btn-full" onclick="ativarTab('chat');SOUNDS.click()" data-i18n="dash.abrirChat">
+          Abrir chat →
+        </button>
+      </div>
+
+    </div><!-- /tab-dashboard -->
+
+    <!-- ===== TAB MAPA ===== -->
+    <div id="tab-mapa" class="tab-content">
+      <div id="mapa-container" style="height:100%;"></div>
+    </div>
+
+    <!-- ===== TAB CHAT ===== -->
+    <div id="tab-chat" class="tab-content">
+      <div id="chat-msgs"></div>
+      <div class="chat-input-area">
+        <textarea id="chat-input" rows="1" placeholder="Pergunte sobre o trânsito..." data-i18n-ph="chat.inputPh" onkeydown="chatKeydown(event)" oninput="this.style.height='auto';this.style.height=this.scrollHeight+'px'"></textarea>
+        <button class="btn-send" onclick="enviarMensagem()">➤</button>
+      </div>
+    </div>
+
+    <!-- ===== TAB CONFIGURAÇÕES ===== -->
+    <div id="tab-config" class="tab-content">
+
+      <!-- Voz do Agente — wizard completo -->
+      <div class="el-box" id="el-status-box">
+        <div class="el-box-header">
+          <span class="el-logo" data-i18n="cfg.elvoz.titulo">🎙️ Voz do Agente</span>
+          <span class="el-badge" id="el-badge" data-i18n="cfg.elvoz.naoConfigurado">Não configurado</span>
+        </div>
+
+        <!-- PASSO 1: Chave API -->
+        <div id="el-step1">
+          <p class="el-desc"><span data-i18n="cfg.elvoz.descPasso1">Cole sua chave de API de voz abaixo. Você a encontra nas configurações da sua conta no serviço de voz.</span><br>
+          <strong style="color:var(--cyan)" data-i18n="cfg.elvoz.descPasso1Strong">Conta → Configurações → API Keys</strong></p>
+          <div class="input-group">
+            <label data-i18n="cfg.elvoz.chaveLabel">Chave de API (sk_...)</label>
+            <div style="display:flex;gap:8px;">
+              <input type="password" id="cfg-el-key" placeholder="sk_xxxxxxxxxxxxxxxxxxxxxxxx" data-i18n-ph="cfg.elvoz.chavePh" autocomplete="off" style="flex:1;">
+              <button class="btn btn-primary" style="padding:10px 16px;white-space:nowrap;" onclick="validarChaveEL()" data-i18n="cfg.elvoz.conectar">
+                Conectar →
+              </button>
+            </div>
+          </div>
+          <div id="el-validando" style="display:none;color:var(--cyan);font-size:0.85em;margin-top:6px;" data-i18n="cfg.elvoz.verificando">
+            ⏳ Verificando chave...
+          </div>
+          <div id="el-erro-chave" style="display:none;color:var(--red);font-size:0.85em;margin-top:6px;"></div>
+        </div>
+
+        <!-- PASSO 2: Selecionar voz (aparece após validar chave) -->
+        <div id="el-step2" style="display:none;">
+          <div style="color:var(--green);font-size:0.9em;margin-bottom:14px;">
+            <span data-i18n="cfg.elvoz.contaConectada">✅ Conta conectada! </span><span id="el-conta-info"></span>
+          </div>
+
+          <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+            <strong style="font-size:0.95em;" data-i18n="cfg.elvoz.escolherVozes">Escolha as vozes</strong>
+            <button class="btn btn-secondary" style="padding:6px 12px;font-size:0.8em;" onclick="buscarVozesEL()" data-i18n="cfg.elvoz.carregarVozes">
+              🔄 Carregar vozes PT-BR
+            </button>
+          </div>
+          <div id="el-loading-vozes" style="display:none;color:var(--muted);font-size:0.85em;margin-bottom:10px;" data-i18n="cfg.elvoz.buscandoVozes">
+            ⏳ Buscando vozes disponíveis...
+          </div>
+
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:12px;">
+            <div class="input-group">
+              <label data-i18n="cfg.elvoz.vozFeminina">👩 Voz feminina</label>
+              <select id="sel-voz-fem">
+                <option value="EXAVITQu4vr4xnSDxMaL" data-i18n="cfg.elvoz.bellaPadrao">Bella (padrão)</option>
+              </select>
+              <button class="btn btn-secondary" style="margin-top:6px;padding:8px;font-size:0.8em;width:100%;" onclick="ouvirPreviewVoz('feminino')" data-i18n="cfg.elvoz.ouvir">▶ Ouvir</button>
+            </div>
+            <div class="input-group">
+              <label data-i18n="cfg.elvoz.vozMasculina">👨 Voz masculina</label>
+              <select id="sel-voz-mal">
+                <option value="VR6AewLTigWG4xSOukaG" data-i18n="cfg.elvoz.arnoldPadrao">Arnold (padrão)</option>
+              </select>
+              <button class="btn btn-secondary" style="margin-top:6px;padding:8px;font-size:0.8em;width:100%;" onclick="ouvirPreviewVoz('masculino')" data-i18n="cfg.elvoz.ouvir">▶ Ouvir</button>
+            </div>
+          </div>
+
+          <div class="el-box" style="border-color:var(--orange);padding:14px;margin-bottom:12px;">
+            <div style="color:var(--orange);font-weight:700;font-size:0.9em;margin-bottom:8px;" data-i18n="cfg.elvoz.gerarTitulo">
+              🧬 Gerar voz com sotaque regional (avançado)
+            </div>
+            <p style="color:var(--muted);font-size:0.82em;margin-bottom:10px;" data-i18n="cfg.elvoz.gerarDesc">
+              A IA cria uma voz nova com o sotaque da região que você escolheu. Usa ~500 caracteres do seu plano de voz.
+            </p>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+              <select id="sel-gerar-sotaque" style="font-size:0.85em;"></select>
+              <select id="sel-gerar-genero" style="font-size:0.85em;">
+                <option value="feminino" data-i18n="cfg.elvoz.optVozFeminina">Voz feminina</option>
+                <option value="masculino" data-i18n="cfg.elvoz.optVozMasculina">Voz masculina</option>
+              </select>
+            </div>
+            <button class="btn btn-primary btn-full" style="margin-top:10px;" onclick="gerarVozRegionalEL()" data-i18n="cfg.elvoz.gerarBtn">
+              🎙️ Gerar voz com sotaque real
+            </button>
+            <div id="el-gerando" style="display:none;color:var(--cyan);font-size:0.82em;margin-top:8px;" data-i18n="cfg.elvoz.gerando">
+              ⏳ Gerando... pode levar 15-30 segundos
+            </div>
+            <div id="el-gerado" style="display:none;color:var(--green);font-size:0.82em;margin-top:8px;"></div>
+          </div>
+
+          <button class="btn btn-primary btn-full" onclick="salvarVozesEL()" data-i18n="cfg.elvoz.salvarVoz">✅ Salvar configuração de voz</button>
+          <button class="btn btn-secondary btn-full" style="margin-top:8px;" onclick="testarVoz()" data-i18n="cfg.elvoz.testarVoz">🔊 Testar voz agora</button>
+        </div>
+
+        <!-- Status quando já configurado -->
+        <div id="el-step3" style="display:none;">
+          <p id="el-desc-ativo" style="color:var(--green);font-size:0.88em;margin-bottom:12px;"></p>
+          <button class="btn btn-secondary btn-full" onclick="mostrarReconfigurar()" data-i18n="cfg.elvoz.trocarVoz">✏️ Trocar voz / reconfigurar</button>
+          <button class="btn btn-secondary btn-full" style="margin-top:8px;" onclick="testarVoz()" data-i18n="cfg.elvoz.testarVoz">🔊 Testar voz agora</button>
+        </div>
+      </div>
+
+      <div class="cfg-section" style="margin-top:20px;">
+        <div class="cfg-section-titulo" data-i18n="cfg.perfil.titulo">Perfil</div>
+        <div class="input-group">
+          <label data-i18n="cfg.perfil.nome">Seu nome</label>
+          <input type="text" id="cfg-nome" placeholder="Nome">
+        </div>
+        <div class="input-group">
+          <label data-i18n="cfg.perfil.pais">🌍 País</label>
+          <select id="cfg-pais" onchange="_popularEstadoSelect('cfg-estado', this.value, null)"></select>
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="input-group" style="margin-bottom:0">
+            <label data-i18n="cfg.perfil.estado">Estado / Região</label>
+            <select id="cfg-estado"></select>
+          </div>
+          <div class="input-group" style="margin-bottom:0">
+            <label data-i18n="cfg.perfil.cidade">Cidade</label>
+            <input type="text" id="cfg-cidade" data-i18n-ph="cfg.perfil.cidadePh" placeholder="Ex: Brasília">
+          </div>
+        </div>
+      </div>
+
+      <div class="cfg-section" style="margin-top:20px;">
+        <div class="cfg-section-titulo" data-i18n="setup.rotas.veiculo.titulo">🚗 Tipo de veículo</div>
+        <div id="cfg-cards-veiculo" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;"></div>
+        <div id="cfg-grupo-dimensoes-veiculo" style="display:none;margin-top:12px;">
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+            <div class="input-group" style="margin-bottom:10px">
+              <label data-i18n="setup.rotas.veiculo.altura">Altura (m)</label>
+              <input type="number" id="cfg-veiculo-altura" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.alturaPh" placeholder="Ex: 4.0">
+            </div>
+            <div class="input-group" style="margin-bottom:10px">
+              <label data-i18n="setup.rotas.veiculo.largura">Largura (m)</label>
+              <input type="number" id="cfg-veiculo-largura" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.larguraPh" placeholder="Ex: 2.5">
+            </div>
+            <div class="input-group" style="margin-bottom:0">
+              <label data-i18n="setup.rotas.veiculo.comprimento">Comprimento (m)</label>
+              <input type="number" id="cfg-veiculo-comprimento" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.comprimentoPh" placeholder="Ex: 16.5">
+            </div>
+            <div class="input-group" style="margin-bottom:0">
+              <label data-i18n="setup.rotas.veiculo.peso">Peso total (t)</label>
+              <input type="number" id="cfg-veiculo-peso" step="0.1" min="0" data-i18n-ph="setup.rotas.veiculo.pesoPh" placeholder="Ex: 40">
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Idioma -->
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.idioma.titulo">🌐 Idioma</div>
+        <p data-i18n="cfg.idioma.sub" style="color:var(--muted);font-size:0.8em;margin-bottom:12px;">
+          Escolha o idioma do app, ou deixe automático conforme sua localização.
+        </p>
+        <div class="audio-mode-grid">
+          <button class="audio-mode-btn" id="ibtn-auto" onclick="setIdioma('auto')">
+            <span class="audio-mode-icone">🌐</span>
+            <span class="audio-mode-label" data-i18n="cfg.idioma.auto">Automático</span>
+            <span class="audio-mode-desc" data-i18n="cfg.idioma.autoDesc">Detecta pela localização</span>
+          </button>
+          <button class="audio-mode-btn" id="ibtn-pt" onclick="setIdioma('pt')">
+            <span class="audio-mode-icone">🇧🇷</span>
+            <span class="audio-mode-label" data-i18n="cfg.idioma.pt">Português BR</span>
+          </button>
+          <button class="audio-mode-btn" id="ibtn-ptpt" onclick="setIdioma('ptpt')">
+            <span class="audio-mode-icone">🇵🇹</span>
+            <span class="audio-mode-label" data-i18n="cfg.idioma.ptpt">Português PT</span>
+          </button>
+          <button class="audio-mode-btn" id="ibtn-es" onclick="setIdioma('es')">
+            <span class="audio-mode-icone">🇪🇸</span>
+            <span class="audio-mode-label" data-i18n="cfg.idioma.es">Español</span>
+          </button>
+          <button class="audio-mode-btn" id="ibtn-en" onclick="setIdioma('en')">
+            <span class="audio-mode-icone">🇬🇧</span>
+            <span class="audio-mode-label" data-i18n="cfg.idioma.en">English</span>
+          </button>
+        </div>
+      </div>
+      <!-- Rota Habitual -->
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.rotaHabitual.titulo">🏠 Rota Habitual</div>
+        <div class="input-group">
+          <label data-i18n="cfg.rotaHabitual.tipoLabel">📌 Tipo de rota habitual</label>
+          <select id="cfg-tipo-habitual">
+            <option value="trabalho_casa" data-i18n="cfg.rotaHabitual.opts.trabalho_casa">🏢 Trabalho / Casa</option>
+            <option value="faculdade" data-i18n="cfg.rotaHabitual.opts.faculdade">🎓 Faculdade / Universidade</option>
+            <option value="colegio" data-i18n="cfg.rotaHabitual.opts.colegio">📚 Colégio / Escola</option>
+            <option value="hospital" data-i18n="cfg.rotaHabitual.opts.hospital">🏥 Hospital / UPA / Clínica</option>
+            <option value="shopping" data-i18n="cfg.rotaHabitual.opts.shopping">🛍️ Shopping Center</option>
+            <option value="supermercado" data-i18n="cfg.rotaHabitual.opts.supermercado">🛒 Supermercado / Mercado</option>
+            <option value="comercio" data-i18n="cfg.rotaHabitual.opts.comercio">💼 Comércio / Negócio</option>
+            <option value="igreja" data-i18n="cfg.rotaHabitual.opts.igreja">⛪ Igreja / Templo / Culto</option>
+            <option value="parentes" data-i18n="cfg.rotaHabitual.opts.parentes">👨‍👩‍👧 Parentes / Amigos</option>
+            <option value="reparticao" data-i18n="cfg.rotaHabitual.opts.reparticao">🏛️ Repartição Pública / Banco</option>
+            <option value="outros_hab" data-i18n="cfg.rotaHabitual.opts.outros_hab">📍 Outros</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label data-i18n="cfg.rotaHabitual.pontoPartida">🏠 Ponto de partida (bairro / região)</label>
+          <input type="text" id="cfg-origem" list="cfg-bairros-orig" placeholder="Ex: Asa Norte">
+          <datalist id="cfg-bairros-orig"></datalist>
+        </div>
+        <div class="input-group">
+          <label data-i18n="cfg.rotaHabitual.destinoPrincipal">📍 Destino principal</label>
+          <input type="text" id="cfg-destino" list="cfg-bairros-dest" placeholder="Ex: Asa Sul">
+          <datalist id="cfg-bairros-dest"></datalist>
+        </div>
+      </div>
+
+      <!-- Rota Alternativa -->
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.rotaAlternativa.titulo">🔀 Rota Alternativa</div>
+        <p style="color:var(--muted);font-size:0.8em;margin-bottom:12px;" data-i18n="cfg.rotaAlternativa.sub">Onde você vai além do trajeto habitual.</p>
+        <div class="input-group">
+          <label data-i18n="cfg.rotaAlternativa.tipoLabel">📌 Tipo de rota alternativa</label>
+          <select id="cfg-tipo-alternativa">
+            <option value="academia" data-i18n="cfg.rotaAlternativa.opts.academia">💪 Academia / Musculação</option>
+            <option value="pilates" data-i18n="cfg.rotaAlternativa.opts.pilates">🧘 Pilates / Yoga / Meditação</option>
+            <option value="consulta" data-i18n="cfg.rotaAlternativa.opts.consulta">🩺 Consulta Médica / Dentista</option>
+            <option value="treino" data-i18n="cfg.rotaAlternativa.opts.treino">⚽ Treino Esportivo / Clube</option>
+            <option value="restaurante" data-i18n="cfg.rotaAlternativa.opts.restaurante">🍽️ Restaurante / Lanchonete</option>
+            <option value="bar" data-i18n="cfg.rotaAlternativa.opts.bar">🎉 Saídas Sociais / Baladas</option>
+            <option value="lazer" data-i18n="cfg.rotaAlternativa.opts.lazer">🌳 Praia / Parque / Lazer</option>
+            <option value="salao" data-i18n="cfg.rotaAlternativa.opts.salao">✂️ Salão de Beleza / Barbearia</option>
+            <option value="servicos" data-i18n="cfg.rotaAlternativa.opts.servicos">🏦 Banco / Cartório / Serviços</option>
+            <option value="evento" data-i18n="cfg.rotaAlternativa.opts.evento">🎭 Evento / Show / Teatro</option>
+            <option value="compras" data-i18n="cfg.rotaAlternativa.opts.compras">🛍️ Compras / Outlet / Feira</option>
+            <option value="viagem" data-i18n="cfg.rotaAlternativa.opts.viagem">✈️ Aeroporto / Rodoviária</option>
+            <option value="outros_alt" data-i18n="cfg.rotaAlternativa.opts.outros_alt">📍 Outros</option>
+          </select>
+        </div>
+        <div class="input-group">
+          <label data-i18n="cfg.rotaAlternativa.deOnde">🏠 De onde sai (opcional)</label>
+          <input type="text" id="cfg-origem-alt" placeholder="Ex: Asa Norte, trabalho, casa..." data-i18n-ph="cfg.rotaAlternativa.deOndePh">
+        </div>
+        <div class="input-group">
+          <label data-i18n="cfg.rotaAlternativa.paraOnde">📍 Para onde vai (opcional)</label>
+          <input type="text" id="cfg-destino-alt" placeholder="Ex: Smart Fit Taguatinga, Clínica Saúde..." data-i18n-ph="cfg.rotaAlternativa.paraOndePh">
+        </div>
+      </div>
+      <div class="cfg-section">
+        <div class="cfg-section-titulo">🚦 Alertas de trânsito e rota alternativa</div>
+        <p style="color:var(--muted);font-size:0.8em;margin-bottom:12px;">
+          Avisa quando há engarrafamento ou acidente à frente e diz se vale a pena mudar de rota — a decisão é sempre sua.
+        </p>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label">Ativar alertas durante a navegação</div>
+            <div class="toggle-sub">Monitora a rota em tempo real e sugere alternativa quando compensa</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="cfg-alerta-transito" checked>
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="input-group" style="margin-top:10px;margin-bottom:0">
+          <label>Avisar com quantos km de antecedência?</label>
+          <select id="cfg-alerta-distancia">
+            <option value="5">5 km antes</option>
+            <option value="15" selected>15 km antes</option>
+            <option value="20">20 km antes</option>
+          </select>
+        </div>
+      </div>
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.personalidade.titulo">Personalidade do agente</div>
+        <div style="color:var(--muted);font-size:0.85em;margin-bottom:12px;">
+          <span data-i18n="cfg.personalidade.genero">Gênero:</span> <strong style="color:var(--cyan)" id="cfg-genero-label">--</strong> &nbsp;|&nbsp;
+          <span data-i18n="cfg.personalidade.sotaque">Sotaque:</span> <strong style="color:var(--cyan)" id="cfg-sotaque-label">--</strong><br>
+          <span data-i18n="cfg.personalidade.humor">Humor:</span> <strong style="color:var(--cyan)" id="cfg-humor-label">--</strong> &nbsp;|&nbsp;
+          <span data-i18n="cfg.personalidade.perfil">Perfil:</span> <strong style="color:var(--cyan)" id="cfg-prof-label">--</strong>
+        </div>
+        <button class="btn btn-secondary btn-full" onclick="abrirWizardVoz()" data-i18n="cfg.personalidade.alterar">✏️ Alterar personalidade do agente</button>
+      </div>
+      <!-- Tema: Dia / Noite / Automático -->
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.aparencia.titulo">🎨 Aparência</div>
+        <p style="color:var(--muted);font-size:0.8em;margin-bottom:12px;" data-i18n="cfg.aparencia.desc">
+          Escolha o tema visual do app.
+        </p>
+        <div class="tema-grid">
+          <button class="tema-btn" id="tbtn-dia" onclick="setTema('dia')">
+            <span class="tema-btn-icone">☀️</span>
+            <span class="tema-btn-label" data-i18n="cfg.aparencia.dia">Dia</span>
+            <span class="tema-btn-desc" data-i18n="cfg.aparencia.diaDesc">Fundo claro</span>
+          </button>
+          <button class="tema-btn" id="tbtn-noite" onclick="setTema('noite')">
+            <span class="tema-btn-icone">🌙</span>
+            <span class="tema-btn-label" data-i18n="cfg.aparencia.noite">Noite</span>
+            <span class="tema-btn-desc" data-i18n="cfg.aparencia.noiteDesc">Fundo escuro</span>
+          </button>
+          <button class="tema-btn" id="tbtn-auto" onclick="setTema('auto')">
+            <span class="tema-btn-icone">🔄</span>
+            <span class="tema-btn-label" data-i18n="cfg.aparencia.auto">Automático</span>
+            <span class="tema-btn-desc" data-i18n="cfg.aparencia.autoDesc">Por horário</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Controle de Áudio -->
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.audio.titulo">🔊 Controle de Áudio</div>
+        <p style="color:var(--muted);font-size:0.8em;margin-bottom:12px;" data-i18n="cfg.audio.desc">
+          Escolha o que você quer ouvir durante a condução.
+        </p>
+        <div class="audio-mode-grid">
+          <button class="audio-mode-btn" id="abtn-tudo"      onclick="setAudioMode('tudo')">
+            <span class="audio-mode-icone">🔊</span>
+            <span class="audio-mode-label" data-i18n="cfg.audio.tudo">Ouvir tudo</span>
+            <span class="audio-mode-desc" data-i18n="cfg.audio.tudoDesc">Rota + alertas climáticos</span>
+          </button>
+          <button class="audio-mode-btn" id="abtn-so_rota"   onclick="setAudioMode('so_rota')">
+            <span class="audio-mode-icone">🗺️</span>
+            <span class="audio-mode-label" data-i18n="cfg.audio.soRota">Só rota</span>
+            <span class="audio-mode-desc" data-i18n="cfg.audio.soRotaDesc">Silencia balões de clima</span>
+          </button>
+          <button class="audio-mode-btn" id="abtn-so_alertas" onclick="setAudioMode('so_alertas')">
+            <span class="audio-mode-icone">🌤️</span>
+            <span class="audio-mode-label" data-i18n="cfg.audio.soAlertas">Só alertas</span>
+            <span class="audio-mode-desc" data-i18n="cfg.audio.soAlertasDesc">Silencia orientações de rota</span>
+          </button>
+          <button class="audio-mode-btn" id="abtn-silencio"  onclick="setAudioMode('silencio')">
+            <span class="audio-mode-icone">🔇</span>
+            <span class="audio-mode-label" data-i18n="cfg.audio.silencio">Silêncio</span>
+            <span class="audio-mode-desc" data-i18n="cfg.audio.silencioDesc">Apenas visual, sem áudio</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Balões Climáticos -->
+      <div class="cfg-section">
+        <div class="cfg-section-titulo" data-i18n="cfg.clima.titulo">🌡️ Balões de Clima</div>
+        <div class="toggle-row">
+          <div>
+            <div class="toggle-label" data-i18n="cfg.clima.toggleLabel">Balões de informação climática</div>
+            <div class="toggle-sub" data-i18n="cfg.clima.toggleSub">Alertas saem do escapamento do carro</div>
+          </div>
+          <label class="toggle">
+            <input type="checkbox" id="tog-balaoes" onchange="setBaloesAtivo(this.checked)">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div id="balaoes-intervalo-row" style="margin-top:10px;">
+          <label style="font-size:0.82em;color:var(--muted);display:block;margin-bottom:6px;" data-i18n="cfg.clima.intervaloLabel">Intervalo de exibição</label>
+          <select id="sel-balaoes-intervalo" class="sl-select" style="width:100%;" onchange="setBaloesIntervalo(+this.value)">
+            <option value="3" data-i18n="cfg.clima.int3">A cada 3 minutos</option>
+            <option value="5" data-i18n="cfg.clima.int5">A cada 5 minutos</option>
+            <option value="10" data-i18n="cfg.clima.int10">A cada 10 minutos</option>
+            <option value="20" data-i18n="cfg.clima.int20">A cada 20 minutos</option>
+            <option value="30" data-i18n="cfg.clima.int30">A cada 30 minutos</option>
+          </select>
+        </div>
+      </div>
+
+      <button class="btn btn-primary btn-full" style="margin-bottom:10px;" onclick="salvarConfiguracoes()" data-i18n="cfg.botoes.salvar">💾 Salvar alterações</button>
+      <button class="btn btn-danger btn-full" onclick="resetarApp()" data-i18n="cfg.botoes.resetar">🗑️ Recomeçar do zero</button>
+    </div>
+
+  </div><!-- /app-body -->
+
+  <!-- Bottom navigation -->
+  <nav class="bottom-nav">
+    <button class="tab-btn ativa" data-tab="dashboard" onclick="ativarTab('dashboard');SOUNDS.tab()">
+      <i data-lucide="home" class="tab-icon-lc"></i>
+      <span data-i18n="nav.inicio">Início</span>
+    </button>
+    <button class="tab-btn" data-tab="mapa" onclick="ativarTab('mapa');SOUNDS.tab()">
+      <i data-lucide="map" class="tab-icon-lc"></i>
+      <span data-i18n="nav.mapa">Mapa</span>
+    </button>
+    <button class="tab-btn" data-tab="chat" onclick="ativarTab('chat');SOUNDS.tab()">
+      <i data-lucide="message-circle" class="tab-icon-lc"></i>
+      <span data-i18n="nav.chat">Chat</span>
+    </button>
+    <button class="tab-btn" data-tab="config" onclick="abrirConfiguracoes();SOUNDS.tab()">
+      <i data-lucide="settings" class="tab-icon-lc"></i>
+      <span data-i18n="nav.config">Config</span>
+    </button>
+  </nav>
+
+  <!-- Container dos balões climáticos -->
+  <div id="balaoes-container"></div>
+
+  <!-- Barra de status: Modo Condução ativo -->
+  <div id="modo-cond-bar">
+    <span id="cond-ouvindo-dot">🔴</span>
+    <strong>MODO CONDUÇÃO</strong> — ouvindo…
+    <span id="cond-cmd-label" style="opacity:0.7;margin-left:6px;font-style:italic;"></span>
+  </div>
+
+  <!-- Botão flutuante: Modo Condução -->
+  <button id="fab-modo-cond" onclick="MODO_COND.toggle()" title="Modo Condução por voz">
+    <svg xmlns="http://www.w3.org/2000/svg" width="22" height="22" viewBox="0 0 24 24"
+         fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/>
+      <path d="M19 10v2a7 7 0 0 1-14 0v-2"/>
+      <line x1="12" y1="19" x2="12" y2="23"/>
+      <line x1="8" y1="23" x2="16" y2="23"/>
+    </svg>
+  </button>
+
+</div><!-- /tela-app -->
+
+<!-- Toast global -->
+<div id="toast"></div>
+
+<!-- Modal de Incidente -->
+<div id="modal-incidente" class="modal-overlay" onclick="fecharModalIncidente(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-titulo" id="modal-inc-titulo" data-i18n="modal.incidente.titulo">Incidente na rota</div>
+    <div class="modal-detalhe-row">
+      <span class="modal-detalhe-label" data-i18n="modal.incidente.tipo">Tipo</span>
+      <span class="modal-detalhe-val" id="modal-inc-tipo">—</span>
+    </div>
+    <div class="modal-detalhe-row">
+      <span class="modal-detalhe-label" data-i18n="modal.incidente.local">Local</span>
+      <span class="modal-detalhe-val" id="modal-inc-local">—</span>
+    </div>
+    <div class="modal-detalhe-row">
+      <span class="modal-detalhe-label" data-i18n="modal.incidente.km">KM aprox.</span>
+      <span class="modal-detalhe-val" id="modal-inc-km">—</span>
+    </div>
+    <div class="modal-detalhe-row">
+      <span class="modal-detalhe-label" data-i18n="modal.incidente.referencia">Referência</span>
+      <span class="modal-detalhe-val" id="modal-inc-ref">—</span>
+    </div>
+    <div class="modal-detalhe-row">
+      <span class="modal-detalhe-label" data-i18n="modal.incidente.situacao">Situação</span>
+      <span class="modal-detalhe-val" id="modal-inc-situacao" style="color:var(--red);">—</span>
+    </div>
+    <div class="modal-acoes">
+      <button class="btn btn-primary btn-full" onclick="verIncidenteNoMapa()">
+        <i data-lucide="map-pin" style="width:16px;height:16px;"></i>
+        <span data-i18n="modal.incidente.verMapa">Ver no mapa</span>
+      </button>
+      <button class="btn btn-secondary btn-full" onclick="pedirRotaAlternativa()" data-i18n="modal.incidente.pedirAlternativa">
+        🔀 Pedir rota alternativa
+      </button>
+      <button class="btn btn-maps btn-full" onclick="abrirGoogleMaps()" data-i18n="modal.incidente.redirecionando">
+        🗺️ Redirecionando no Google Maps
+      </button>
+      <button class="btn btn-danger btn-full" onclick="fecharModalIncidente()" data-i18n="modal.incidente.fechar">
+        Fechar
+      </button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal "Ir para..." (rota livre) -->
+<div id="modal-ir-para" class="modal-overlay" onclick="fecharModalIrPara(event)">
+  <div class="modal-box" onclick="event.stopPropagation()">
+    <div class="modal-handle"></div>
+    <div class="modal-titulo" data-i18n="modal.irPara.titulo">📍 Para onde você quer ir?</div>
+
+    <!-- Atalhos de rotas gravadas -->
+    <div style="display:flex;gap:8px;margin-bottom:14px;">
+      <button class="btn btn-secondary" style="flex:1;font-size:0.82em;" onclick="usarRotaGravada('habitual')" data-i18n="dash.rotaHabitual">🏠 Habitual</button>
+      <button class="btn btn-secondary" style="flex:1;font-size:0.82em;" onclick="usarRotaGravada('alternativa')" data-i18n="dash.rotaAlternativa">🔀 Alternativa</button>
+    </div>
+
+    <div style="color:var(--muted);font-size:0.75em;text-align:center;margin:-6px 0 10px;" data-i18n="modal.irPara.ouEscolha">― ou escolha outra rota ―</div>
+
+    <!-- Origem -->
+    <div class="input-group">
+      <label><span data-i18n="modal.irPara.origem">Origem</span> <span style="color:var(--muted);font-size:0.82em;" data-i18n="modal.irPara.opcional">(opcional)</span></label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="inp-origem-livre" placeholder="De onde você vai sair?" data-i18n-ph="modal.irPara.origemPh" list="bairros-sugeridos-modal-orig" style="flex:1;">
+        <button class="btn btn-secondary" style="padding:0 10px;font-size:1.1em;" title="Usar minha localização" data-i18n-title="modal.irPara.usarLocalizacao" onclick="usarGPS('origem')">📡</button>
+      </div>
+      <datalist id="bairros-sugeridos-modal-orig"></datalist>
+    </div>
+
+    <!-- Destino -->
+    <div class="input-group" style="margin-top:10px;">
+      <label data-i18n="modal.irPara.destino">Destino</label>
+      <div style="display:flex;gap:8px;">
+        <input type="text" id="inp-destino-livre" placeholder="Bairro, rua ou ponto de referência" data-i18n-ph="modal.irPara.destinoPh" list="bairros-sugeridos-modal" style="flex:1;">
+        <button class="btn btn-secondary" style="padding:0 10px;font-size:1.1em;" title="Usar minha localização como destino" data-i18n-title="modal.irPara.usarLocalizacaoDestino" onclick="usarGPS('destino')">📡</button>
+      </div>
+      <datalist id="bairros-sugeridos-modal"></datalist>
+    </div>
+
+    <div id="gps-status" style="color:var(--cyan);font-size:0.78em;margin-top:6px;display:none;text-align:center;" data-i18n="modal.irPara.gpsStatus">Obtendo localização...</div>
+
+    <div class="modal-acoes">
+      <button class="btn btn-primary btn-full" onclick="iniciarRotaLivre()" data-i18n="modal.irPara.iniciarNavegacao">🗺️ Iniciar navegação</button>
+      <button class="btn btn-secondary btn-full" onclick="fecharModalIrPara()" data-i18n="modal.irPara.cancelar">Cancelar</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modo Navegação 3D (câmera seguindo o veículo em tempo real) -->
+<div id="tela-navegacao" style="display:none;position:fixed;inset:0;z-index:9999;background:#000;">
+  <div id="nav-mapa-container" style="position:absolute;inset:0;"></div>
+
+  <div style="position:absolute;top:0;left:0;right:0;padding:14px;display:flex;gap:10px;align-items:flex-start;background:linear-gradient(to bottom, rgba(0,0,0,0.75), transparent);">
+    <button onclick="NAV.encerrar()" style="width:40px;height:40px;border-radius:50%;border:none;background:rgba(20,20,20,0.85);color:#fff;font-size:1.1em;flex-shrink:0;">✕</button>
+    <div style="flex:1;background:rgba(20,20,20,0.85);border-radius:12px;padding:10px 14px;color:#fff;">
+      <div id="nav-instrucao-distancia" style="font-size:1.3em;font-weight:700;color:#4caf50;">—</div>
+      <div id="nav-instrucao-texto" style="font-size:0.85em;color:#ddd;">Calculando rota...</div>
+    </div>
+  </div>
+
+  <button id="nav-btn-recentralizar" onclick="NAV.recentralizar()" style="position:absolute;right:14px;bottom:130px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(20,20,20,0.85);color:#fff;font-size:1.2em;">🎯</button>
+
+  <!-- Alerta de trânsito / rota alternativa -->
+  <div id="nav-alerta-transito" style="display:none;position:absolute;left:14px;right:14px;top:100px;background:#1a1a1a;border:2px solid #ff9800;border-radius:14px;padding:14px;color:#fff;">
+    <div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">
+      <span style="font-size:1.4em;">🚦</span>
+      <strong id="nav-alerta-titulo" style="font-size:0.95em;">Engarrafamento à frente</strong>
+    </div>
+    <div id="nav-alerta-texto" style="font-size:0.85em;color:#ddd;margin-bottom:12px;">—</div>
+    <div style="display:flex;gap:10px;">
+      <button onclick="NAV.recusarRotaAlternativa()" style="flex:1;background:#333;border:none;border-radius:10px;padding:10px;color:#fff;font-weight:600;">Manter rota</button>
+      <button onclick="NAV.aceitarRotaAlternativa()" style="flex:1;background:#4caf50;border:none;border-radius:10px;padding:10px;color:#fff;font-weight:700;">Mudar de rota</button>
+    </div>
+  </div>
+
+  <div style="position:absolute;left:0;right:0;bottom:0;padding:16px;display:flex;gap:12px;align-items:center;background:linear-gradient(to top, rgba(0,0,0,0.85), transparent);">
+    <div style="background:rgba(20,20,20,0.85);border-radius:12px;padding:10px 16px;color:#fff;text-align:center;">
+      <div id="nav-eta-tempo" style="font-size:1.15em;font-weight:700;">--:--</div>
+      <div style="font-size:0.7em;color:#aaa;">chegada</div>
+    </div>
+    <div style="background:rgba(20,20,20,0.85);border-radius:12px;padding:10px 16px;color:#fff;text-align:center;">
+      <div id="nav-distancia-valor" style="font-size:1.15em;font-weight:700;">-- km</div>
+      <div style="font-size:0.7em;color:#aaa;">restante</div>
+    </div>
+    <button onclick="NAV.encerrar()" style="flex:1;background:#e53935;border:none;border-radius:12px;padding:12px;color:#fff;font-weight:700;">Encerrar</button>
+  </div>
+</div>
+
+<!-- Scripts -->
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/maplibre-gl@4.7.1/dist/maplibre-gl.js"></script>
+<script src="https://unpkg.com/gsap@3.12.5/dist/gsap.min.js"></script>
+<script src="https://unpkg.com/lucide@0.469.0/dist/umd/lucide.js"></script>
+<script src="js/config.js"></script>
+<script src="js/data.js"></script>
+<script src="js/i18n.js"></script>
+<script src="js/traffic.js"></script>
+<script src="js/agent.js"></script>
+<script src="js/voice.js"></script>
+<script src="js/sounds.js"></script>
+<script src="js/app.js"></script>
+<script>
+// Funções extras não inclusas no app.js principal
+
+// ── Voz do Agente — Wizard ───────────────────────────────────
+
+function atualizarStatusEL() {
+  const temChave = !!VOICE.apiKey;
+  document.getElementById("el-badge").textContent = temChave ? t("cfg.elvoz.ativo") : t("cfg.elvoz.naoConfigurado");
+  document.getElementById("el-badge").classList.toggle("ativo", temChave);
+
+  if (temChave) {
+    document.getElementById("el-step1").style.display = "none";
+    document.getElementById("el-step2").style.display = "none";
+    document.getElementById("el-step3").style.display = "block";
+    const femNome = document.getElementById("sel-voz-fem")?.selectedOptions[0]?.text || t("cfg.elvoz.vozConfigurada");
+    document.getElementById("el-desc-ativo").textContent =
+      _fmt(t("cfg.elvoz.descAtivo"), { voz: femNome });
+    // preenche campo de chave se voltar para editar
+    const inp = document.getElementById("cfg-el-key");
+    if (inp) inp.value = VOICE.apiKey;
+  } else {
+    document.getElementById("el-step1").style.display = "block";
+    document.getElementById("el-step2").style.display = "none";
+    document.getElementById("el-step3").style.display = "none";
+  }
+  // Popular select de sotaque para gerar voz regional (correto por país)
+  const selS = document.getElementById("sel-gerar-sotaque");
+  if (selS) {
+    const pais = STATE.perfil.pais || "BR";
+    const lista = pais === "ES" ? DATA.sotaquesES : pais === "PT" ? DATA.sotaquesPT : DATA.sotaques;
+    selS.innerHTML = "";
+    lista.forEach(s => selS.add(new Option(s.nome, s.id)));
+    if (STATE.perfil.sotaque) selS.value = STATE.perfil.sotaque;
+  }
+}
+
+async function validarChaveEL() {
+  const key = document.getElementById("cfg-el-key")?.value.trim();
+  if (!key) { mostrarToast(t("cfg.elvoz.coleChavePrimeiro")); return; }
+
+  document.getElementById("el-validando").style.display = "block";
+  document.getElementById("el-erro-chave").style.display = "none";
+  SOUNDS.click();
+
+  try {
+    const user = await VOICE.validarChave(key);
+    VOICE.save({ apiKey: key });
+    document.getElementById("el-validando").style.display = "none";
+    document.getElementById("el-step1").style.display = "none";
+    document.getElementById("el-step2").style.display = "block";
+    document.getElementById("el-conta-info").textContent =
+      _fmt(t("cfg.elvoz.contaInfo"), { nome: user.first_name || t("cfg.elvoz.usuarioPadrao"), chars: Math.round((user.subscription?.character_limit||0)/1000) });
+    document.getElementById("el-badge").textContent = t("cfg.elvoz.ativo");
+    document.getElementById("el-badge").classList.add("ativo");
+    SOUNDS.success();
+    mostrarToast(t("cfg.elvoz.chaveValida"));
+    // Busca vozes automaticamente
+    buscarVozesEL();
+  } catch (e) {
+    document.getElementById("el-validando").style.display = "none";
+    document.getElementById("el-erro-chave").style.display = "block";
+    document.getElementById("el-erro-chave").textContent = t("cfg.elvoz.chaveInvalida");
+  }
+}
+
+async function buscarVozesEL() {
+  const key = VOICE.apiKey || document.getElementById("cfg-el-key")?.value.trim();
+  if (!key) return;
+  document.getElementById("el-loading-vozes").style.display = "block";
+
+  try {
+    const vozes = await VOICE.buscarVozes(key);
+    popularSelectVozes(vozes);
+    document.getElementById("el-loading-vozes").style.display = "none";
+    mostrarToast(_fmt(t("cfg.elvoz.vozesEncontradas"), { n: vozes.length }));
+  } catch(e) {
+    document.getElementById("el-loading-vozes").style.display = "none";
+    mostrarToast(t("cfg.elvoz.erroBuscarVozes"));
+  }
+}
+
+function popularSelectVozes(vozes) {
+  ["sel-voz-fem","sel-voz-mal"].forEach(id => {
+    const sel = document.getElementById(id);
+    if (!sel) return;
+    sel.innerHTML = "";
+    vozes.forEach(v => {
+      const opt = document.createElement("option");
+      opt.value = v.voice_id;
+      opt.text  = `${v.name}${v.labels?.language ? " ("+v.labels.language+")" : ""}`;
+      sel.add(opt);
+    });
+    // Restaura seleção salva
+    const savedFem = VOICE.cfg[`vid_brasiliense_feminino`];
+    const savedMal = VOICE.cfg[`vid_brasiliense_masculino`];
+    if (id === "sel-voz-fem" && savedFem) sel.value = savedFem;
+    if (id === "sel-voz-mal" && savedMal) sel.value = savedMal;
+  });
+}
+
+function ouvirPreviewVoz(genero) {
+  const selId  = genero === "feminino" ? "sel-voz-fem" : "sel-voz-mal";
+  const voiceId = document.getElementById(selId)?.value;
+  if (!voiceId || !VOICE.apiKey) { mostrarToast(t("cfg.elvoz.configureVozPrimeiro")); return; }
+  SOUNDS.click();
+  const perfil = { ...STATE.perfil, genero };
+  // Seta temporariamente o voice ID para o teste
+  const anterior = VOICE.cfg[`vid_brasiliense_${genero}`];
+  VOICE.save({ [`vid_brasiliense_${genero}`]: voiceId });
+  const txt = t("cfg.elvoz.textoPreview");
+  VOICE.falar(txt, perfil,
+    () => mostrarToast(t("cfg.elvoz.reproduzindoPreview")),
+    () => { mostrarToast(t("cfg.elvoz.vozOk")); if(!anterior) VOICE.save({ [`vid_brasiliense_${genero}`]: voiceId }); }
+  );
+}
+
+function salvarVozesEL() {
+  const femId = document.getElementById("sel-voz-fem")?.value;
+  const malId = document.getElementById("sel-voz-mal")?.value;
+  if (femId) VOICE.save({ "vid_brasiliense_feminino": femId });
+  if (malId) VOICE.save({ "vid_brasiliense_masculino": malId });
+  atualizarStatusEL();
+  SOUNDS.success();
+  mostrarToast(t("cfg.elvoz.vozConfiguradaSucesso"));
+  setTimeout(testarVoz, 600);
+}
+
+async function gerarVozRegionalEL() {
+  const sotaque = document.getElementById("sel-gerar-sotaque")?.value;
+  const genero  = document.getElementById("sel-gerar-genero")?.value;
+  if (!sotaque || !genero) return;
+  if (!VOICE.apiKey) { mostrarToast(t("cfg.elvoz.configureChavePrimeiro")); return; }
+
+  document.getElementById("el-gerando").style.display = "block";
+  document.getElementById("el-gerado").style.display  = "none";
+  SOUNDS.click();
+
+  try {
+    const voiceId = await VOICE.gerarVozRegional(sotaque, genero);
+    document.getElementById("el-gerando").style.display = "none";
+    document.getElementById("el-gerado").style.display  = "block";
+    document.getElementById("el-gerado").textContent =
+      _fmt(t("cfg.elvoz.vozGeradaSalva"), { sotaque, genero, id: voiceId.substring(0,12) });
+    SOUNDS.success();
+    mostrarToast(_fmt(t("cfg.elvoz.vozCriadaSotaque"), { sotaque }));
+  } catch(e) {
+    document.getElementById("el-gerando").style.display = "none";
+    mostrarToast(t("cfg.elvoz.erroPrefixo") + e.message);
+  }
+}
+
+function mostrarReconfigurar() {
+  document.getElementById("el-step3").style.display = "none";
+  if (VOICE.apiKey) {
+    // Já tem chave — vai direto para step2 (selecionar voz / gerar sotaque)
+    document.getElementById("el-step1").style.display = "none";
+    document.getElementById("el-step2").style.display = "block";
+  } else {
+    document.getElementById("el-step1").style.display = "block";
+    document.getElementById("el-step2").style.display = "none";
+  }
+}
+
+function testarVoz() {
+  if (!STATE.statusAtual) atualizarDashboard();
+  const msg = AGENT.gerar(STATE.statusAtual, STATE.perfil);
+  VOICE.falar(msg, STATE.perfil,
+    () => mostrarToast("🔊 Reproduzindo..."),
+    () => SOUNDS.notify()
+  );
+}
+
+function atualizarLabelsCfg() {
+  const p = STATE.perfil;
+  const genNome = t(`cards.genero.${p.genero}.nome`) + (p.genero === "feminino" ? " 👩" : " 👨");
+  // Busca o nome do sotaque na lista correta por país
+  const paisL = p.pais || "BR";
+  const listaSotL = paisL === "ES" ? DATA.sotaquesES : paisL === "PT" ? DATA.sotaquesPT : DATA.sotaques;
+  const sotNome = listaSotL.find(s=>s.id===p.sotaque)?.nome || p.sotaque || "—";
+  const humNome = t(`cards.humor.${p.humor}.nome`) || p.humor;
+  const profNome = t(`cards.profissao.${p.profissao}.nome`) || p.profissao;
+  document.getElementById("cfg-genero-label").textContent = genNome;
+  document.getElementById("cfg-sotaque-label").textContent = sotNome;
+  document.getElementById("cfg-humor-label").textContent = humNome;
+  document.getElementById("cfg-prof-label").textContent = profNome;
+  if (typeof _sincAudioModeBtns === "function") _sincAudioModeBtns();
+  if (typeof _sincTemaBtns === "function") _sincTemaBtns();
+  if (typeof _sincBalaoesCfg === "function") _sincBalaoesCfg();
+}
+
+function abrirWizardVoz() {
+  // Reabre o setup apenas na parte de voz
+  irSetup(2);
+  irVozPasso(0);
+  irPara("setup");
+}
+
+function resetarApp() {
+  if (confirm(t("cfg.botoes.confirmResetar"))) {
+    localStorage.removeItem("sigalivre_perfil");
+    location.reload();
+  }
+}
+
+// (botão do setup controlado diretamente por irSetup em app.js)
+</script>
+
+<!-- Modal: Seletor de Região (topbar) -->
+<div id="modal-regiao" class="modal-overlay" onclick="fecharSeletorRegiao()">
+  <div class="modal-box" onclick="event.stopPropagation()" style="max-width:340px;">
+    <div class="modal-titulo" data-i18n="modal.regiao.titulo">🗺️ Minha Região</div>
+    <p style="color:var(--muted);font-size:0.84em;margin-bottom:16px;" data-i18n="modal.regiao.subtitulo">Escolha seu estado e cidade para personalizar rotas, clima e informações locais.</p>
+    <div class="input-group">
+      <label data-i18n="modal.regiao.pais">País</label>
+      <select id="reg-pais" onchange="_onMudarPaisRegiao(this.value)">
+        <option value="BR" selected>🇧🇷 Brasil</option>
+        <option value="ES">🇪🇸 Espanha</option>
+        <option value="PT">🇵🇹 Portugal</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label data-i18n="modal.regiao.estado">Estado / Região</label>
+      <select id="reg-estado" onchange="_popularCidadesRegiao(this.value); _popularBairrosRegiao(this.value)">
+        <option value="AC">Acre</option><option value="AL">Alagoas</option>
+        <option value="AP">Amapá</option><option value="AM">Amazonas</option>
+        <option value="BA">Bahia</option><option value="CE">Ceará</option>
+        <option value="DF" selected>Distrito Federal</option><option value="ES">Espírito Santo</option>
+        <option value="GO">Goiás</option><option value="MA">Maranhão</option>
+        <option value="MT">Mato Grosso</option><option value="MS">Mato Grosso do Sul</option>
+        <option value="MG">Minas Gerais</option><option value="PA">Pará</option>
+        <option value="PB">Paraíba</option><option value="PR">Paraná</option>
+        <option value="PE">Pernambuco</option><option value="PI">Piauí</option>
+        <option value="RJ">Rio de Janeiro</option><option value="RN">Rio Grande do Norte</option>
+        <option value="RS">Rio Grande do Sul</option><option value="RO">Rondônia</option>
+        <option value="RR">Roraima</option><option value="SC">Santa Catarina</option>
+        <option value="SP">São Paulo</option><option value="SE">Sergipe</option>
+        <option value="TO">Tocantins</option>
+      </select>
+    </div>
+    <div class="input-group">
+      <label data-i18n="modal.regiao.cidade">Cidade</label>
+      <select id="reg-cidade-sel" onchange="_sincSelectOutra('reg-cidade-sel','reg-cidade-outra', STATE.perfil.cidade)"></select>
+      <input type="text" id="reg-cidade-outra" placeholder="Digite o nome da sua cidade" data-i18n-ph="modal.regiao.cidadePh" list="reg-cidades-sugeridas" style="display:none;margin-top:6px;">
+      <datalist id="reg-cidades-sugeridas"></datalist>
+    </div>
+    <div class="input-group" style="margin-top:10px;">
+      <label><span data-i18n="modal.regiao.bairro">Bairro / Região</span> <span style="color:var(--muted);font-size:0.82em;" data-i18n="modal.regiao.opcional">(opcional)</span></label>
+      <select id="reg-bairro-sel" onchange="_sincSelectOutra('reg-bairro-sel','reg-bairro-outra', STATE.perfil.bairroOrigem)"></select>
+      <input type="text" id="reg-bairro-outra" placeholder="Ex: Asa Norte, Centro, Vila Madalena…" data-i18n-ph="modal.regiao.bairroPh" list="reg-bairros-sugeridos" style="display:none;margin-top:6px;">
+      <datalist id="reg-bairros-sugeridos"></datalist>
+    </div>
+    <div class="input-group" id="reg-cep-grupo" style="margin-top:10px;">
+      <label><span data-i18n="modal.regiao.cep">CEP</span> <span style="color:var(--muted);font-size:0.82em;" data-i18n="modal.regiao.cepObs">(opcional — para maior precisão)</span></label>
+      <input type="text" id="reg-cep-txt" placeholder="00000-000" data-i18n-ph="modal.regiao.cepPh" maxlength="9"
+             oninput="this.value=this.value.replace(/\D/g,'').replace(/^(\d{5})(\d)/,'$1-$2').substring(0,9)">
+    </div>
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button class="btn btn-secondary" style="flex:1;" onclick="fecharSeletorRegiao()" data-i18n="modal.regiao.cancelar">Cancelar</button>
+      <button class="btn btn-primary"   style="flex:2;" onclick="confirmarRegiaoTopbar()" data-i18n="modal.regiao.confirmar">✅ Confirmar</button>
+    </div>
+  </div>
+</div>
+
+</body>
+</html>
