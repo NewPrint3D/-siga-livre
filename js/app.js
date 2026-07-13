@@ -653,10 +653,14 @@ function abrirModalIrPara() {
       dl.innerHTML = "";
       lista.forEach(b => { const o = document.createElement("option"); o.value = b; dl.appendChild(o); });
     });
-    // Pré-preenche origem com bairro do perfil
-    const origInput = document.getElementById("inp-origem-livre");
-    if (origInput && !origInput.value) origInput.value = STATE.perfil.bairroOrigem || "";
   } catch(e) {}
+  // Sempre abre limpo: nenhum chip pré-selecionado, campo de origem vazio.
+  STATE._origemUsaGPS = undefined;
+  document.getElementById("chip-gps")?.classList.remove("ativo");
+  document.getElementById("chip-manual")?.classList.remove("ativo");
+  const origInput = document.getElementById("inp-origem-livre");
+  if (origInput) { origInput.value = ""; origInput.readOnly = false; }
+  _sincOrigemChips();
 
   const modal = document.getElementById("modal-ir-para");
   if (modal) modal.classList.add("aberto");
@@ -682,18 +686,43 @@ function usarRotaGravada(tipo) {
 }
 
 // Usar GPS para preencher origem ou destino
+// Transforma lat/lon em um nome legível (ex: "Benimaclet") via TomTom, com
+// Nominatim (OpenStreetMap) como segunda tentativa gratuita se a primeira falhar.
+// NUNCA deve retornar coordenadas cruas — se as duas falharem, retorna null e
+// quem chamar decide um rótulo genérico ("Localização atual"), nunca números.
+async function _reverseGeocodeTomTom(lat, lon) {
+  try {
+    const url = `https://api.tomtom.com/search/2/reverseGeocode/${lat},${lon}.json?key=${TOMTOM_API_KEY}`;
+    const r = await fetch(url).then(r => r.json());
+    const addr = r.addresses?.[0]?.address;
+    const nome = addr?.municipalitySubdivision || addr?.municipality || addr?.freeformAddress || null;
+    if (nome) return nome;
+  } catch(e) {}
+  try {
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lon}&zoom=14&accept-language=pt-BR`;
+    const r = await fetch(url).then(r => r.json());
+    const a = r.address || {};
+    return a.suburb || a.neighbourhood || a.town || a.city || a.village || a.municipality || null;
+  } catch(e) { return null; }
+}
+
 function usarGPS(campo) {
   const statusEl = document.getElementById("gps-status");
   if (!navigator.geolocation) { mostrarToast("GPS não disponível neste dispositivo"); return; }
   if (statusEl) { statusEl.style.display = "block"; statusEl.textContent = "📡 Obtendo localização..."; }
   navigator.geolocation.getCurrentPosition(
-    pos => {
-      const lat = pos.coords.latitude.toFixed(5);
-      const lng = pos.coords.longitude.toFixed(5);
+    async pos => {
+      const lat = pos.coords.latitude, lng = pos.coords.longitude;
       const inputId = campo === "origem" ? "inp-origem-livre" : "inp-destino-livre";
       const inp = document.getElementById(inputId);
-      if (inp) inp.value = `${lat}, ${lng}`;
-      if (statusEl) { statusEl.textContent = `✅ Localização obtida! (${lat}, ${lng})`; setTimeout(() => { statusEl.style.display = "none"; }, 3000); }
+      const nome = await _reverseGeocodeTomTom(lat, lng);
+      if (inp) inp.value = nome || "📍 Localização atual";
+      if (inp) inp.dataset.gpsLat = lat, inp.dataset.gpsLon = lng;
+      if (campo === "origem") {
+        selecionarOrigemManual();
+        if (inp) inp.readOnly = false;
+      }
+      if (statusEl) { statusEl.textContent = `✅ Localização obtida!`; setTimeout(() => { statusEl.style.display = "none"; }, 3000); }
       mostrarToast(`📍 Localização usada como ${campo}`);
     },
     err => {
@@ -702,6 +731,64 @@ function usarGPS(campo) {
     },
     { timeout: 8000, maximumAge: 30000 }
   );
+}
+
+// ── GPS automático como origem no "Ir para..." ──────────────────────────
+// Busca em segundo plano assim que o app abre, sem travar nada.
+// O campo de origem NUNCA é preenchido sozinho: o usuário decide tocando em
+// um dos chips. Isso evita mostrar texto inesperado (bairro errado, coordenada
+// crua) sem contexto — o app só oferece a localização já pronta, pronta pra
+// usar com um toque, mas nunca a aplica sem o usuário pedir.
+async function _buscarLocalizacaoAtual() {
+  if (!navigator.geolocation) return;
+  navigator.geolocation.getCurrentPosition(
+    async (pos) => {
+      const lat = pos.coords.latitude, lon = pos.coords.longitude;
+      const nome = await _reverseGeocodeTomTom(lat, lon);
+      STATE._gpsAtual = { lat, lon, nome };
+      _sincOrigemChips();
+    },
+    () => {},
+    { enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 }
+  );
+}
+
+// Mostra/esconde os chips "Minha localização" / "Outro ponto" no modal "Ir para".
+// O campo de origem começa sempre vazio (placeholder visível) — nenhum chip é
+// pré-selecionado. O usuário escolhe tocando; só então o campo é preenchido.
+function _sincOrigemChips() {
+  const chipsRow = document.getElementById("origem-chips");
+  const chipGps = document.getElementById("chip-gps");
+  if (!chipsRow || !chipGps) return;
+  chipsRow.style.display = "flex";
+  if (STATE._gpsAtual) {
+    chipGps.disabled = false;
+    chipGps.textContent = "📍 Minha localização";
+  } else {
+    chipGps.disabled = true;
+    chipGps.textContent = "📡 Localizando...";
+  }
+}
+
+function selecionarOrigemGPS() {
+  if (!STATE._gpsAtual) return;
+  document.getElementById("chip-gps")?.classList.add("ativo");
+  document.getElementById("chip-manual")?.classList.remove("ativo");
+  const origInput = document.getElementById("inp-origem-livre");
+  if (origInput) { origInput.value = STATE._gpsAtual.nome || "📍 Localização atual"; origInput.readOnly = true; }
+  STATE._origemUsaGPS = true;
+}
+
+function selecionarOrigemManual() {
+  document.getElementById("chip-manual")?.classList.add("ativo");
+  document.getElementById("chip-gps")?.classList.remove("ativo");
+  const origInput = document.getElementById("inp-origem-livre");
+  if (origInput) {
+    origInput.readOnly = false;
+    if (origInput.value === STATE._gpsAtual?.nome) origInput.value = "";
+    origInput.focus();
+  }
+  STATE._origemUsaGPS = false;
 }
 async function iniciarRotaLivre() {
   const dest = document.getElementById("inp-destino-livre")?.value.trim();
@@ -1305,7 +1392,41 @@ const NAV = {
   velocidadeMediaKmh: 35,
   rotaAlternativaProposta: null,
   alertaAberto: false,
-  _incidentesJaAvisados: null,
+  alertaJaMostrado: false,
+  modoCamera: "seguir", // "seguir" | "fixo"
+  _bearingMarcador: 0,
+  _bearingCamera: 0,
+  _arrastandoPrograma: false,
+
+  // Ícone do veículo visto de cima (não emoji) — "frente" aponta pra cima (0°)
+  _svgVeiculo() {
+    const ehCaminhao = STATE.perfil.veiculo?.tipo === "caminhao";
+    if (ehCaminhao) {
+      return `<svg width="26" height="58" viewBox="0 0 26 58" xmlns="http://www.w3.org/2000/svg">
+        <!-- cabine (frente, aponta pra cima) -->
+        <rect x="4" y="0" width="18" height="16" rx="4" fill="#ffb300" stroke="#5c3d00" stroke-width="1.4"/>
+        <path d="M7,3 L19,3 L17,11 L9,11 Z" fill="#5c3d00" opacity="0.55"/>
+        <circle cx="8" cy="2.5" r="1.1" fill="#fff" opacity="0.8"/>
+        <circle cx="18" cy="2.5" r="1.1" fill="#fff" opacity="0.8"/>
+        <!-- carreta -->
+        <rect x="1" y="18" width="24" height="38" rx="3" fill="#e0e0e0" stroke="#555" stroke-width="1.4"/>
+        <line x1="1" y1="29" x2="25" y2="29" stroke="#999" stroke-width="1"/>
+        <line x1="1" y1="41" x2="25" y2="41" stroke="#999" stroke-width="1"/>
+      </svg>`;
+    }
+    return `<svg width="26" height="44" viewBox="0 0 26 44" xmlns="http://www.w3.org/2000/svg">
+      <!-- corpo (frente aponta pra cima) -->
+      <rect x="1" y="1" width="24" height="42" rx="10" fill="#2196f3" stroke="#0a3d62" stroke-width="1.6"/>
+      <!-- retrovisores -->
+      <rect x="-1" y="13" width="4" height="6" rx="1.6" fill="#0a3d62"/>
+      <rect x="23" y="13" width="4" height="6" rx="1.6" fill="#0a3d62"/>
+      <!-- vidro/teto: mais largo atrás, estreito na frente -->
+      <path d="M8,9 L18,9 L16,25 L10,25 Z" fill="#0a3d62" opacity="0.7"/>
+      <!-- faróis -->
+      <circle cx="8.5" cy="4.5" r="1.5" fill="#fff" opacity="0.85"/>
+      <circle cx="17.5" cy="4.5" r="1.5" fill="#fff" opacity="0.85"/>
+    </svg>`;
+  },
 
   iniciar(rota, destino, destCoord) {
     const rotaCoordsLatLon = rota?.coords || rota; // aceita tanto a rota completa quanto só as coordenadas
@@ -1319,7 +1440,11 @@ const NAV = {
     this.velocidadeMediaKmh = (rota?.min > 0 && kmNum > 0) ? (kmNum / (rota.min / 60)) : 35;
     this.rotaAlternativaProposta = null;
     this.alertaAberto = false;
-    this._incidentesJaAvisados = new Set();
+    this.alertaJaMostrado = false;
+    this.modoCamera = "seguir";
+    this._bearingMarcador = 0;
+    this._bearingCamera = 0;
+    this._ultimoIdxRota = null;
 
     if (rota?.atrasoSegundos > 60) {
       mostrarToast(`🚦 Rota já considera ${Math.round(rota.atrasoSegundos/60)} min de trânsito atual`);
@@ -1327,10 +1452,13 @@ const NAV = {
 
     const tela = document.getElementById("tela-navegacao");
     if (tela) tela.style.display = "block";
+    this._atualizarBotaoModoCamera();
 
     const inicio  = rotaCoordsLatLon[0];
     const proximo = rotaCoordsLatLon[Math.min(5, rotaCoordsLatLon.length - 1)];
     const bearingInicial = this._bearing(inicio, proximo);
+    this._bearingMarcador = bearingInicial;
+    this._bearingCamera = bearingInicial;
     const estiloMapa = document.body.classList.contains("tema-dia") ? "main" : "night";
 
     this.map = new maplibregl.Map({
@@ -1340,8 +1468,35 @@ const NAV = {
       zoom: 17,
       pitch: 60,
       bearing: bearingInicial,
-      attributionControl: false
+      attributionControl: false,
+      dragRotate: false,       // sem rotação por arrastar com botão direito/ctrl
+      pitchWithRotate: false,
+      touchPitch: false
     });
+    // Desativa rotação/inclinação por gesto de toque (pinça) — só zoom e arrastar
+    this.map.touchZoomRotate.disableRotation();
+
+    // Se o usuário arrastar o mapa de verdade, sai do modo "seguir" (igual Google Maps).
+    // Só conta como "arrastar" depois de um deslocamento mínimo em pixels — assim um toque
+    // leve ou uma vibração do celular no suporte do carro não tira a câmera do modo seguir sozinha.
+    let _centroLngLatInicial = null;
+    this.map.on("dragstart", () => {
+      if (this._arrastandoPrograma) return;
+      _centroLngLatInicial = this.map.getCenter();
+    });
+    this.map.on("drag", () => {
+      if (this._arrastandoPrograma || !_centroLngLatInicial || this.modoCamera !== "seguir") return;
+      const canvas = this.map.getCanvas();
+      const centroTela = { x: canvas.clientWidth / 2, y: canvas.clientHeight / 2 };
+      const pontoOriginalAgora = this.map.project(_centroLngLatInicial);
+      const dist = Math.hypot(pontoOriginalAgora.x - centroTela.x, pontoOriginalAgora.y - centroTela.y);
+      if (dist > 18) {
+        this.modoCamera = "fixo";
+        this._atualizarBotaoModoCamera();
+        _centroLngLatInicial = null;
+      }
+    });
+    this.map.on("dragend", () => { _centroLngLatInicial = null; });
 
     this.map.on("load", () => {
       this.map.addSource("nav-rota", {
@@ -1359,9 +1514,22 @@ const NAV = {
         layout: { "line-cap": "round", "line-join": "round" }
       });
 
+      // Trechos com trânsito ruim (atualizados a cada 60s pelo monitor) — vermelho tracejado por cima
+      this.map.addSource("nav-rota-congestionada", {
+        type: "geojson",
+        data: { type: "FeatureCollection", features: [] }
+      });
+      this.map.addLayer({
+        id: "nav-rota-congestionada-linha",
+        type: "line",
+        source: "nav-rota-congestionada",
+        paint: { "line-color": "#ff1744", "line-width": 6, "line-opacity": 0.95, "line-dasharray": [2, 1.5] },
+        layout: { "line-cap": "round", "line-join": "round" }
+      });
+
       const el = document.createElement("div");
-      el.textContent = (STATE.perfil.veiculo?.tipo === "caminhao") ? "🚛" : "🚗";
-      el.style.fontSize = "32px";
+      el.innerHTML = this._svgVeiculo();
+      el.style.transform = "translateY(4px)";
       this.marcador = new maplibregl.Marker({ element: el, rotationAlignment: "map", pitchAlignment: "map" })
         .setLngLat([inicio[1], inicio[0]])
         .setRotation(bearingInicial)
@@ -1377,7 +1545,7 @@ const NAV = {
   _ligarGPS() {
     if (!navigator.geolocation) { this._simular(); return; }
     this.watchId = navigator.geolocation.watchPosition(
-      pos => this._atualizarPosicao(pos.coords.latitude, pos.coords.longitude, pos.coords.heading),
+      pos => this._atualizarPosicao(pos.coords.latitude, pos.coords.longitude, pos.coords.heading, pos.coords.speed),
       () => {
         if (this.watchId != null) { navigator.geolocation.clearWatch(this.watchId); this.watchId = null; }
         mostrarToast("📡 GPS indisponível — mostrando trajeto simulado");
@@ -1387,18 +1555,131 @@ const NAV = {
     );
   },
 
-  _atualizarPosicao(lat, lon, headingDispositivo) {
-    const pos = [lat, lon];
-    const bearing = (headingDispositivo != null && !isNaN(headingDispositivo))
-      ? headingDispositivo
-      : (this.ultimaPos ? this._bearing(this.ultimaPos, pos) : (this.map?.getBearing() || 0));
-    this.ultimaPos = pos;
+  // Alterna entre câmera "seguindo" o veículo e "fixa" (usuário pode olhar ao redor)
+  alternarModoCamera() {
+    this.modoCamera = (this.modoCamera === "seguir") ? "fixo" : "seguir";
+    this._atualizarBotaoModoCamera();
+    if (this.modoCamera === "seguir" && this.ultimaPos && this.map) {
+      this._arrastandoPrograma = true;
+      this.map.easeTo({ center: [this.ultimaPos[1], this.ultimaPos[0]], bearing: this._bearingCamera, pitch: 60, duration: 500 });
+      setTimeout(() => { this._arrastandoPrograma = false; }, 600);
+    }
+  },
 
-    if (this.marcador) { this.marcador.setLngLat([lon, lat]); this.marcador.setRotation(bearing); }
-    if (this.map) this.map.easeTo({ center: [lon, lat], bearing, pitch: 60, duration: 900 });
+  _atualizarBotaoModoCamera() {
+    const btn = document.getElementById("nav-btn-modo-camera");
+    if (!btn) return;
+    btn.textContent = (this.modoCamera === "seguir") ? "🧭" : "📌";
+    btn.title = (this.modoCamera === "seguir") ? "Fixar câmera" : "Voltar a seguir";
+  },
+
+  // Diferença angular entre dois ângulos (0-360), sempre no intervalo -180..180
+  _diffAngular(a, b) {
+    let d = (b - a + 540) % 360 - 180;
+    return d;
+  },
+
+  _atualizarPosicao(lat, lon, headingDispositivo, velocidadeMs) {
+    const posBruta = [lat, lon];
+    // Cola a posição na linha da rota (até 45m de desvio) — evita o veículo "flutuar" fora da via.
+    // A busca fica restrita a uma janela à frente do último ponto conhecido (não a rota inteira),
+    // pra impedir que ruído de GPS faça o "snap" pular pra outro trecho próximo (ex: cruzamento,
+    // rua paralela) e vire a direção do nada — só avança, nunca "teleporta" pra trás.
+    let projecao = this._projetarNaRota(posBruta, this.rotaCoords, this._ultimoIdxRota);
+    if (!projecao || projecao.distanciaM > 45) {
+      // Fora da janela esperada (rota recalculada, desvio real) — tenta de novo sem restrição
+      projecao = this._projetarNaRota(posBruta, this.rotaCoords, null);
+    }
+    const pos = (projecao && projecao.distanciaM <= 45) ? projecao.ponto : posBruta;
+    this.ultimaPos = pos;
+    if (projecao && projecao.distanciaM <= 45) this._ultimoIdxRota = projecao.idx;
+
+    // Parado ou andando muito devagar (ex: sinal fechado): mantém a direção atual em vez de
+    // recalcular — é justamente aí que o pequeno ruído do GPS faz a "agulha de bússola" girar
+    // sem o carro estar de fato se movendo.
+    const parado = velocidadeMs != null && !isNaN(velocidadeMs) && velocidadeMs < 0.8;
+
+    // Direção calculada pela própria rota (~22m à frente), não pelo GPS bruto —
+    // isso é o que evita o efeito "agulha de bússola" tremendo a cada leitura de GPS
+    let bearingAlvo;
+    if (parado) {
+      bearingAlvo = this._bearingMarcador;
+    } else if (projecao && projecao.distanciaM <= 45) {
+      const alvo = this._pontoAdiante(projecao, this.rotaCoords, 22);
+      bearingAlvo = alvo ? this._bearing(pos, alvo) : this._bearingMarcador;
+    } else if (headingDispositivo != null && !isNaN(headingDispositivo)) {
+      bearingAlvo = headingDispositivo;
+    } else {
+      bearingAlvo = this._bearingMarcador;
+    }
+
+    // Só gira o veículo se a diferença for grande o bastante (limiar 7°)
+    if (Math.abs(this._diffAngular(this._bearingMarcador, bearingAlvo)) > 7) {
+      this._bearingMarcador = bearingAlvo;
+    }
+    if (this.marcador) { this.marcador.setLngLat([pos[1], pos[0]]); this.marcador.setRotation(this._bearingMarcador); }
+
+    // Câmera: só reorienta se a diferença for maior que 5°, e só no modo "seguir"
+    if (this.modoCamera === "seguir" && this.map) {
+      if (Math.abs(this._diffAngular(this._bearingCamera, bearingAlvo)) > 5) {
+        this._bearingCamera = bearingAlvo;
+      }
+      this._arrastandoPrograma = true;
+      this.map.easeTo({ center: [pos[1], pos[0]], bearing: this._bearingCamera, pitch: 60, duration: 900 });
+      setTimeout(() => { this._arrastandoPrograma = false; }, 950);
+    }
 
     this._atualizarPainel(this._distanciaRestante(pos, this.rotaCoords));
     this._atualizarInstrucao(this._distanciaPercorrida(pos, this.rotaCoords));
+  },
+
+  // Projeta um ponto na rota: acha o segmento mais próximo e o ponto exato sobre ele
+  // (não só o vértice mais próximo — assim o "snap" fica suave, sem saltos entre pontos da rota).
+  // Se `idxReferencia` for informado, só busca numa janela à frente dele (progresso sempre pra
+  // frente na rota) — evita que o snap pule pra um trecho distante por ruído de GPS.
+  _projetarNaRota(pos, coords, idxReferencia) {
+    if (!coords || coords.length < 2) return null;
+    let ini = 0, fim = coords.length - 1;
+    if (idxReferencia != null) {
+      ini = Math.max(0, idxReferencia - 3);
+      fim = Math.min(coords.length - 1, idxReferencia + 25);
+    }
+    let melhorIdx = ini, melhorPonto = coords[ini], melhorDist = Infinity, melhorT = 0;
+    for (let i = ini; i < fim; i++) {
+      const a = coords[i], b = coords[i+1];
+      const { ponto, t } = this._pontoMaisPertoNoSegmento(pos, a, b);
+      const d = this._distanciaMetros(pos, ponto);
+      if (d < melhorDist) { melhorDist = d; melhorPonto = ponto; melhorIdx = i; melhorT = t; }
+    }
+    return { ponto: melhorPonto, idx: melhorIdx, t: melhorT, distanciaM: melhorDist };
+  },
+
+  // Ponto mais próximo de `pos` sobre o segmento reto entre a e b (aproximação planar — ok pra poucos metros)
+  _pontoMaisPertoNoSegmento(pos, a, b) {
+    const [px, py] = [pos[0], pos[1]], [ax, ay] = [a[0], a[1]], [bx, by] = [b[0], b[1]];
+    const dx = bx - ax, dy = by - ay;
+    const lenSq = dx*dx + dy*dy;
+    let t = lenSq > 0 ? ((px-ax)*dx + (py-ay)*dy) / lenSq : 0;
+    t = Math.max(0, Math.min(1, t));
+    return { ponto: [ax + t*dx, ay + t*dy], t };
+  },
+
+  // Anda `distanciaM` à frente na rota a partir de uma projeção (idx/t), pra saber a direção real
+  _pontoAdiante(projecao, coords, distanciaM) {
+    let idx = projecao.idx, restante = distanciaM;
+    let atual = projecao.ponto;
+    while (idx < coords.length - 1) {
+      const prox = coords[idx+1];
+      const d = this._distanciaMetros(atual, prox);
+      if (d >= restante) {
+        const t = restante / d;
+        return [atual[0] + t*(prox[0]-atual[0]), atual[1] + t*(prox[1]-atual[1])];
+      }
+      restante -= d;
+      atual = prox;
+      idx++;
+    }
+    return coords[coords.length - 1];
   },
 
   _atualizarPainel(distanciaM) {
@@ -1440,7 +1721,10 @@ const NAV = {
 
   recentralizar() {
     if (!this.map || !this.ultimaPos) return;
-    this.map.easeTo({ center: [this.ultimaPos[1], this.ultimaPos[0]], pitch: 60, duration: 500 });
+    // Recentraliza a vista sem sair do modo "fixo" (se estiver nele)
+    this._arrastandoPrograma = true;
+    this.map.easeTo({ center: [this.ultimaPos[1], this.ultimaPos[0]], bearing: this._bearingCamera, pitch: 60, duration: 500 });
+    setTimeout(() => { this._arrastandoPrograma = false; }, 600);
   },
 
   encerrar() {
@@ -1451,6 +1735,8 @@ const NAV = {
     this.marcador = null;
     this.ultimaPos = null;
     this.alertaAberto = false;
+    this.alertaJaMostrado = false;
+    this.modoCamera = "seguir";
     this.rotaAlternativaProposta = null;
     const alertaDiv = document.getElementById("nav-alerta-transito");
     if (alertaDiv) alertaDiv.style.display = "none";
@@ -1461,14 +1747,21 @@ const NAV = {
   // ── Monitoramento de trânsito real e sugestão de rota alternativa ──────
   _iniciarMonitorTransito() {
     if (this.monitorTimer) { clearInterval(this.monitorTimer); this.monitorTimer = null; }
-    if (!STATE.perfil.alertaTransito) return;
-    this.monitorTimer = setInterval(() => this._avaliarTransitoAdiante(), 60000);
+    this.monitorTimer = setInterval(() => {
+      this._avaliarTransitoAdiante();
+      this._atualizarTrechosCongestionados();
+    }, 60000);
     // primeira checagem logo no início, sem esperar o intervalo inteiro
-    setTimeout(() => this._avaliarTransitoAdiante(), 8000);
+    setTimeout(() => {
+      this._avaliarTransitoAdiante();
+      this._atualizarTrechosCongestionados();
+    }, 8000);
   },
 
   async _avaliarTransitoAdiante() {
-    if (this.alertaAberto || !this.ultimaPos || !this.destCoord) return;
+    if (!STATE.perfil.alertaTransito) return;
+    // Alerta de engarrafamento/rota alternativa: no máximo UMA vez por navegação
+    if (this.alertaJaMostrado || this.alertaAberto || !this.ultimaPos || !this.destCoord) return;
     const distKm = STATE.perfil.alertaTransitoDistanciaKm || 15;
     const segmento = this._segmentoAdiante(this.ultimaPos, this.rotaCoords, distKm);
     if (!segmento.length) return;
@@ -1479,9 +1772,6 @@ const NAV = {
 
     const atrasoTotalSeg = relevantes.reduce((soma, inc) => soma + this._estimarAtrasoSegundos(inc), 0);
     if (atrasoTotalSeg < 180) return; // menos de 3 min de atraso não vale incomodar o motorista
-
-    const chaveIncidentes = relevantes.map(i => JSON.stringify(i.geometry.coordinates[0] || i.geometry.coordinates)).sort().join("|");
-    if (this._incidentesJaAvisados.has(chaveIncidentes)) return;
 
     // Calcula rota alternativa da posição atual até o destino final,
     // respeitando as dimensões do caminhão quando for o caso
@@ -1495,17 +1785,34 @@ const NAV = {
 
     // Tempo restante estimado pela rota atual, considerando o atraso detectado
     const restanteAtualM  = this._distanciaRestante(this.ultimaPos, this.rotaCoords);
-    const velocidadeMediaKmh = 35;
+    const velocidadeMediaKmh = this.velocidadeMediaKmh || 35;
     const tempoAtualMin  = (restanteAtualM / 1000) / velocidadeMediaKmh * 60 + (atrasoTotalSeg / 60);
     const economiaMin    = Math.round(tempoAtualMin - rotaAlt.min);
 
-    this._incidentesJaAvisados.add(chaveIncidentes);
+    this.alertaJaMostrado = true; // não avisa de novo nesta navegação, seja qual for a decisão
     if (economiaMin >= 3) {
       this.rotaAlternativaProposta = rotaAlt;
       this._mostrarAlertaTransito(atrasoTotalSeg, economiaMin, true);
     } else {
       this._mostrarAlertaTransito(atrasoTotalSeg, economiaMin, false);
     }
+  },
+
+  // Pinta em vermelho tracejado, por cima da rota azul, os trechos com
+  // engarrafamento/acidente/obra — independente do alerta (que só aparece uma vez),
+  // isso continua atualizando a cada 60s durante toda a navegação
+  async _atualizarTrechosCongestionados() {
+    if (!this.map || !this.map.getSource("nav-rota-congestionada") || !this.rotaCoords?.length) return;
+    try {
+      const bbox = this._bboxDoSegmento(this.rotaCoords);
+      const incidentes = await this._buscarIncidentesTomTom(bbox);
+      const relevantes = incidentes.filter(inc => this._estimarAtrasoSegundos(inc) > 0 || inc.properties?.magnitudeOfDelay >= 2);
+      const features = relevantes
+        .map(inc => inc.geometry)
+        .filter(g => g && (g.type === "LineString" || g.type === "Point"))
+        .map(g => ({ type: "Feature", geometry: g, properties: {} }));
+      this.map.getSource("nav-rota-congestionada").setData({ type: "FeatureCollection", features });
+    } catch(e) {}
   },
 
   _mostrarAlertaTransito(atrasoSegundos, economiaMin, valeAPena) {
@@ -1616,7 +1923,7 @@ const NAV = {
     this.simTimer = setInterval(() => {
       if (i >= this.rotaCoords.length) { clearInterval(this.simTimer); return; }
       const [lat, lon] = this.rotaCoords[i];
-      this._atualizarPosicao(lat, lon, null);
+      this._atualizarPosicao(lat, lon, null, 8); // simula em movimento (~29 km/h) pra girar normalmente
       i += 3;
     }, 1000);
   },
@@ -1968,6 +2275,12 @@ const _autocompleteNominatim = _debounce(async function(query, datalistId) {
 }, 400);
 
 async function _geocodeLocal(query, pais) {
+  // Aceita coordenadas digitadas/coladas direto (ex: "39.4699, -0.3763")
+  const matchCoord = query.trim().match(/^(-?\d{1,3}(?:\.\d+)?)\s*,\s*(-?\d{1,3}(?:\.\d+)?)$/);
+  if (matchCoord) {
+    const lat = parseFloat(matchCoord[1]), lon = parseFloat(matchCoord[2]);
+    if (Math.abs(lat) <= 90 && Math.abs(lon) <= 180) return { lat, lon };
+  }
   const lang    = pais === "ES" ? "es" : "pt";
   const country = pais === "BR" ? "br" : pais === "ES" ? "es" : "pt";
   const cc      = country.toUpperCase();
@@ -2054,8 +2367,12 @@ async function tracarRotaNaMapa(orig, dest, pais) {
   if (!STATE.mapaLeaflet || !orig || !dest) return;
   mostrarToast("🗺️ Calculando rota...");
   try {
+    // Se a origem é a localização atual (GPS), usa a coordenada exata em vez de re-geocodificar o nome
+    const oCoordPromise = (STATE._origemUsaGPS && STATE._gpsAtual)
+      ? Promise.resolve({ lat: STATE._gpsAtual.lat, lon: STATE._gpsAtual.lon })
+      : _geocodeLocal(orig, pais || STATE.perfil.pais);
     const [oCoord, dCoord] = await Promise.all([
-      _geocodeLocal(orig, pais || STATE.perfil.pais),
+      oCoordPromise,
       _geocodeLocal(dest, pais || STATE.perfil.pais)
     ]);
     if (!oCoord || !dCoord) { mostrarToast("Endereço não encontrado"); return; }
@@ -2627,6 +2944,7 @@ window.addEventListener("DOMContentLoaded", async () => {
   if (jaTemPerfil) {
     // Perfil existente: não precisa esperar a detecção para popular os selects
     inicializarIdioma();
+    _buscarLocalizacaoAtual(); // GPS em segundo plano, pronto quando abrir "Ir para..."
   } else {
     // 1ª vez (ou após reset): aguarda detecção para já carregar país/região/cidade corretos
     await inicializarIdioma(false, true);
