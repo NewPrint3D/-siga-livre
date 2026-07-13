@@ -79,213 +79,10 @@
   <div class="splash-content">
     <div class="splash-car-wrap">
       <!-- Porsche 911 (992) — silhueta fiel: fastback, faróis redondos, roda traseira maior -->
-      <svg class="splash-car-svg" viewBox="0 0 370 112" xmlns="http://www.w3.org/2000/svg">
-        <defs>
-          <linearGradient id="pBodyG" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#1c3d7a"/>
-            <stop offset="55%" stop-color="#0d2046"/>
-            <stop offset="100%" stop-color="#070f1e"/>
-          </linearGradient>
-          <linearGradient id="pRoofG" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stop-color="#18326a"/>
-            <stop offset="100%" stop-color="#0a1830"/>
-          </linearGradient>
-          <linearGradient id="pGlassG" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#0b2244" stop-opacity="0.75"/>
-            <stop offset="100%" stop-color="#020d1e" stop-opacity="0.92"/>
-          </linearGradient>
-          <radialGradient id="pWheelG" cx="50%" cy="50%" r="50%">
-            <stop offset="0%" stop-color="#182848"/>
-            <stop offset="65%" stop-color="#080e20"/>
-            <stop offset="100%" stop-color="#030810"/>
-          </radialGradient>
-          <radialGradient id="pRimShine" cx="35%" cy="30%" r="60%">
-            <stop offset="0%" stop-color="#2868b0" stop-opacity="0.6"/>
-            <stop offset="100%" stop-color="#00123a" stop-opacity="0.1"/>
-          </radialGradient>
-          <filter id="pGlow" x="-50%" y="-50%" width="200%" height="200%">
-            <feGaussianBlur stdDeviation="4" result="b"/>
-            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <filter id="pgSm" x="-30%" y="-30%" width="160%" height="160%">
-            <feGaussianBlur stdDeviation="2" result="b"/>
-            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-          <filter id="pgTail" x="-20%" y="-20%" width="140%" height="140%">
-            <feGaussianBlur stdDeviation="2.5" result="b"/>
-            <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
-          </filter>
-        </defs>
-
-        <!-- Reflexo no asfalto -->
-        <ellipse cx="188" cy="107" rx="168" ry="4.5" fill="rgba(0,212,255,0.09)"/>
-
-        <!-- ══════════════════════════════════════════
-             PORSCHE 911 (992) — frente para a DIREITA
-             Chão: y=106  |  Frente: x≈350  |  Traseira: x≈18
-             Roda traseira: cx=70, cy=87, r=19 (maior)
-             Roda dianteira: cx=300, cy=89, r=17 (menor)
-             Longarina/soleira: y≈73
-        ══════════════════════════════════════════ -->
-
-        <!-- ── Corpo inferior (soleira + pára-choques) ── -->
-        <path d="M 50 73 L 288 72
-                 Q 305 71 316 67
-                 Q 328 62 336 64
-                 Q 346 65 350 72
-                 L 346 81
-                 Q 328 83 312 83
-                 L 90 83
-                 Q 66 83 50 77 Z"
-              fill="url(#pBodyG)" stroke="#00d4ff" stroke-width="1.2"/>
-
-        <!-- ── Carroceria superior: fastback 911 — traseira MAIS ALTA que a frente ── -->
-        <!-- A silhueta flui da traseira (alta, motor) até a frente (baixa, sem motor) -->
-        <path d="M 50 73
-                 Q 36 69 28 63
-                 Q 20 56 22 49
-                 Q 28 42 44 39
-                 Q 60 36 78 34
-                 Q 105 25 142 16
-                 Q 175 10 210 10
-                 Q 238 10 258 20
-                 Q 270 29 276 46
-                 Q 281 57 286 70
-                 L 288 72 Z"
-              fill="url(#pRoofG)" stroke="#00d4ff" stroke-width="1.3"/>
-
-        <!-- ── Vidraça (greenhouse) — para-brisa extremamente inclinado ── -->
-        <path d="M 104 71
-                 Q 118 47 152 30
-                 Q 182 18 216 15
-                 Q 244 13 262 24
-                 Q 273 33 275 52
-                 L 274 71 Z"
-              fill="url(#pGlassG)" stroke="#0077aa" stroke-width="0.9" opacity="0.93"/>
-
-        <!-- Montante-B sutil (linha interna da janela lateral) -->
-        <line x1="190" y1="16" x2="208" y2="71" stroke="#04111e" stroke-width="4" opacity="0.55"/>
-        <!-- Reflexo leve no para-brisa -->
-        <path d="M 112 65 Q 128 42 158 28 Q 145 30 120 58" fill="none" stroke="white" stroke-width="0.9" opacity="0.09"/>
-
-        <!-- ── Tampa do motor traseiro + duto de ar ── -->
-        <!-- Elevação suave do capô traseiro — motor ar-resfriado atrás -->
-        <path d="M 24 47 Q 38 42 72 40 L 70 47 Q 38 49 25 54 Z"
-              fill="#050e1e" stroke="#00d4ff" stroke-width="0.8" opacity="0.88"/>
-        <line x1="32" y1="43" x2="31" y2="52" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
-        <line x1="41" y1="42" x2="40" y2="50" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
-        <line x1="50" y1="41" x2="50" y2="49" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
-        <line x1="59" y1="41" x2="59" y2="48" stroke="#00d4ff" stroke-width="0.55" opacity="0.42"/>
-
-        <!-- Protuberância do motor traseiro -->
-        <path d="M 28 62 Q 18 60 14 67 Q 12 74 17 79 L 38 79 L 38 62 Z"
-              fill="#081420" stroke="#00d4ff" stroke-width="0.9"/>
-
-        <!-- Aerofólio / duck-tail (992) -->
-        <path d="M 14 41 Q 24 36 55 36 L 55 40 Q 26 40 16 45 Z"
-              fill="#0c1c3e" stroke="#00d4ff" stroke-width="1"/>
-
-        <!-- ── Lanternas traseiras: faixa LED contínua (911 moderno) ── -->
-        <rect x="14" y="57" width="28" height="9" rx="2.5" fill="#880000" filter="url(#pgTail)"/>
-        <rect x="14" y="57" width="15" height="9" rx="2.5" fill="#ff2020" opacity="0.92"/>
-        <line x1="15" y1="61.5" x2="40" y2="61.5" stroke="#ff9999" stroke-width="0.7" opacity="0.3"/>
-
-        <!-- ── Farol REDONDO — assinatura inconfundível do Porsche 911 ── -->
-        <!-- Halo externo glow -->
-        <circle cx="342" cy="62" r="16" fill="rgba(0,212,255,0.11)" filter="url(#pGlow)"/>
-        <!-- Anel do farol (bezel) -->
-        <circle cx="342" cy="62" r="12" fill="#02070e" stroke="#00d4ff" stroke-width="2.8" filter="url(#pgSm)"/>
-        <!-- Espelho refletor interno -->
-        <circle cx="342" cy="62" r="7.5" fill="#05122c" stroke="#009ac8" stroke-width="0.8"/>
-        <!-- Ponto luminoso central -->
-        <circle cx="342" cy="62" r="4.5" fill="white" opacity="0.9"/>
-        <circle cx="340" cy="60" r="2" fill="white" opacity="0.45"/>
-        <!-- DRL circular pontilhado (halo ring) -->
-        <circle cx="342" cy="62" r="13.5" fill="none" stroke="#00d4ff" stroke-width="1.3"
-                opacity="0.55" stroke-dasharray="4.5 3"/>
-        <!-- Barra DRL acima do farol -->
-        <path d="M 326 49 Q 336 45 349 47 Q 344 44 334 43 Q 322 46 326 49 Z"
-              fill="#00d4ff" opacity="0.68" filter="url(#pgSm)"/>
-
-        <!-- Pára-choque dianteiro + splitter -->
-        <path d="M 310 79 L 346 76 L 350 83 L 310 83 Z"
-              fill="#030810" stroke="#00d4ff" stroke-width="0.7" opacity="0.82"/>
-        <line x1="318" y1="79" x2="318" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
-        <line x1="326" y1="78" x2="326" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
-        <line x1="334" y1="78" x2="334" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
-        <line x1="342" y1="78" x2="342" y2="83" stroke="#00d4ff" stroke-width="0.5" opacity="0.4"/>
-
-        <!-- Espelho retrovisor esportivo -->
-        <path d="M 283 54 L 277 57 L 275 63 L 288 62 Z"
-              fill="#0c1e44" stroke="#00d4ff" stroke-width="0.8"/>
-
-        <!-- Linha de cintura (character line) -->
-        <path d="M 40 64 Q 100 63 272 62 Q 290 61 306 59"
-              fill="none" stroke="#00d4ff" stroke-width="0.6" opacity="0.26"/>
-
-        <!-- ── RODA TRASEIRA (maior — 305/30 R20 no 911) ── -->
-        <!-- Paralama traseiro alargado (flared fender) -->
-        <path d="M 42 81 Q 46 58 70 52 Q 92 48 112 57 Q 122 64 124 81 Z"
-              fill="url(#pBodyG)" stroke="#00d4ff" stroke-width="0.9"/>
-        <!-- Pneu -->
-        <circle cx="70" cy="87" r="21" fill="#030810" stroke="#00d4ff" stroke-width="2.2"/>
-        <circle cx="70" cy="87" r="21" fill="none" stroke="#0b1830" stroke-width="5.5"/>
-        <!-- Aro / rim -->
-        <circle cx="70" cy="87" r="15.5" fill="url(#pWheelG)" stroke="#183060" stroke-width="1"/>
-        <circle cx="70" cy="87" r="15.5" fill="url(#pRimShine)"/>
-        <!-- 5 raios Porsche (ângulos: 90°,162°,234°,306°,18° = 0°,72°,144°,216°,288° a partir do topo) -->
-        <g transform="translate(70,87)" stroke="#00bcd8" stroke-linecap="round">
-          <!-- Raio 1: 12h -->
-          <line x1="0" y1="0" x2="0" y2="-15.5" stroke-width="3.2" opacity="0.75"/>
-          <!-- Raio 2: 72° -->
-          <line x1="0" y1="0" x2="14.7" y2="-4.8" stroke-width="3.2" opacity="0.75"/>
-          <!-- Raio 3: 144° -->
-          <line x1="0" y1="0" x2="9.1" y2="12.6" stroke-width="3.2" opacity="0.75"/>
-          <!-- Raio 4: 216° -->
-          <line x1="0" y1="0" x2="-9.1" y2="12.6" stroke-width="3.2" opacity="0.75"/>
-          <!-- Raio 5: 288° -->
-          <line x1="0" y1="0" x2="-14.7" y2="-4.8" stroke-width="3.2" opacity="0.75"/>
-        </g>
-        <!-- Freio a disco visível entre os raios -->
-        <circle cx="70" cy="87" r="8.5" fill="none" stroke="#1a2c50" stroke-width="2" opacity="0.65"/>
-        <!-- Calota central Porsche -->
-        <circle cx="70" cy="87" r="5" fill="#040c20" stroke="#00d4ff" stroke-width="1.3"/>
-        <circle cx="70" cy="87" r="2.5" fill="#00d4ff" opacity="0.72"/>
-        <!-- Reflexo no pneu -->
-        <path d="M 54 73 Q 58 69 64 69 Q 58 75 52 78"
-              fill="none" stroke="white" stroke-width="0.8" opacity="0.12"/>
-
-        <!-- ── RODA DIANTEIRA (menor — 235/35 R20) ── -->
-        <!-- Paralama dianteiro -->
-        <path d="M 275 81 Q 279 60 300 54 Q 317 50 328 59 Q 335 65 337 81 Z"
-              fill="url(#pBodyG)" stroke="#00d4ff" stroke-width="0.9"/>
-        <!-- Pneu -->
-        <circle cx="300" cy="89" r="18" fill="#030810" stroke="#00d4ff" stroke-width="2"/>
-        <circle cx="300" cy="89" r="18" fill="none" stroke="#0b1830" stroke-width="4.5"/>
-        <!-- Aro -->
-        <circle cx="300" cy="89" r="13" fill="url(#pWheelG)" stroke="#183060" stroke-width="1"/>
-        <circle cx="300" cy="89" r="13" fill="url(#pRimShine)"/>
-        <!-- 5 raios (escala proporcional menor) -->
-        <g transform="translate(300,89)" stroke="#00bcd8" stroke-linecap="round">
-          <line x1="0" y1="0" x2="0" y2="-13" stroke-width="2.7" opacity="0.75"/>
-          <line x1="0" y1="0" x2="12.4" y2="-4.0" stroke-width="2.7" opacity="0.75"/>
-          <line x1="0" y1="0" x2="7.6" y2="10.5" stroke-width="2.7" opacity="0.75"/>
-          <line x1="0" y1="0" x2="-7.6" y2="10.5" stroke-width="2.7" opacity="0.75"/>
-          <line x1="0" y1="0" x2="-12.4" y2="-4.0" stroke-width="2.7" opacity="0.75"/>
-        </g>
-        <circle cx="300" cy="89" r="7" fill="none" stroke="#1a2c50" stroke-width="1.5" opacity="0.65"/>
-        <circle cx="300" cy="89" r="4.5" fill="#040c20" stroke="#00d4ff" stroke-width="1.1"/>
-        <circle cx="300" cy="89" r="2" fill="#00d4ff" opacity="0.72"/>
-
-        <!-- ── Escapamentos duplos (posicionados no pára-choque traseiro) ── -->
-        <ellipse cx="26" cy="91" rx="5.5" ry="3.8" fill="#07101e" stroke="#1a2230" stroke-width="1"/>
-        <ellipse cx="26" cy="91" rx="3" ry="2" fill="#030810"/>
-        <ellipse cx="40" cy="91" rx="5.5" ry="3.8" fill="#07101e" stroke="#1a2230" stroke-width="1"/>
-        <ellipse cx="40" cy="91" rx="3" ry="2" fill="#030810"/>
-        <!-- Glow sutil do escapamento -->
-        <ellipse cx="26" cy="91" rx="7" ry="5" fill="rgba(0,160,210,0.07)"/>
-        <ellipse cx="40" cy="91" rx="7" ry="5" fill="rgba(0,160,210,0.07)"/>
-      </svg>
+      <picture>
+        <source srcset="assets/carro-3d-splash.webp" type="image/webp">
+        <img class="splash-car-svg" src="assets/carro-3d-splash.png" alt="" width="370" height="112">
+      </picture>
       <div class="splash-beam"></div>
       <div class="splash-dust"></div>
     </div>
@@ -1142,9 +939,12 @@
     <!-- Origem -->
     <div class="input-group">
       <label><span data-i18n="modal.irPara.origem">Origem</span> <span style="color:var(--muted);font-size:0.82em;" data-i18n="modal.irPara.opcional">(opcional)</span></label>
+      <div id="origem-chips" style="display:none;gap:8px;margin-bottom:8px;">
+        <button type="button" class="chip-origem" id="chip-gps" onclick="selecionarOrigemGPS()">📍 Minha localização</button>
+        <button type="button" class="chip-origem" id="chip-manual" onclick="selecionarOrigemManual()">✍️ Outro ponto</button>
+      </div>
       <div style="display:flex;gap:8px;">
         <input type="text" id="inp-origem-livre" placeholder="De onde você vai sair?" data-i18n-ph="modal.irPara.origemPh" list="bairros-sugeridos-modal-orig" style="flex:1;">
-        <button class="btn btn-secondary" style="padding:0 10px;font-size:1.1em;" title="Usar minha localização" data-i18n-title="modal.irPara.usarLocalizacao" onclick="usarGPS('origem')">📡</button>
       </div>
       <datalist id="bairros-sugeridos-modal-orig"></datalist>
     </div>
@@ -1181,6 +981,7 @@
   </div>
 
   <button id="nav-btn-recentralizar" onclick="NAV.recentralizar()" style="position:absolute;right:14px;bottom:130px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(20,20,20,0.85);color:#fff;font-size:1.2em;">🎯</button>
+  <button id="nav-btn-modo-camera" onclick="NAV.alternarModoCamera()" title="Fixar câmera" style="position:absolute;right:14px;bottom:184px;width:44px;height:44px;border-radius:50%;border:none;background:rgba(20,20,20,0.85);color:#fff;font-size:1.2em;">🧭</button>
 
   <!-- Alerta de trânsito / rota alternativa -->
   <div id="nav-alerta-transito" style="display:none;position:absolute;left:14px;right:14px;top:100px;background:#1a1a1a;border:2px solid #ff9800;border-radius:14px;padding:14px;color:#fff;">
