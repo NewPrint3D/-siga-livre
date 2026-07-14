@@ -53,7 +53,9 @@ const STATE = {
     veiculo: { tipo: "carro" },
     // Alertas de trânsito durante a navegação
     alertaTransito: true,
-    alertaTransitoDistanciaKm: 15
+    alertaTransitoDistanciaKm: 15,
+    // Histórico automático das últimas rotas navegadas (mais recente primeiro)
+    historicoRotas: []
   },
 
   statusAtual:     null,
@@ -675,9 +677,35 @@ function abrirModalIrPara() {
   const origInput = document.getElementById("inp-origem-livre");
   if (origInput) { origInput.value = ""; origInput.readOnly = false; }
   _sincOrigemChips();
+  _renderizarHistoricoRotas();
 
   const modal = document.getElementById("modal-ir-para");
   if (modal) modal.classList.add("aberto");
+  SOUNDS.click();
+}
+
+// Mostra até 5 rotas recentes (das últimas 20 gravadas automaticamente) como
+// chips tocáveis — tocar preenche origem/destino, sem iniciar sozinho.
+function _renderizarHistoricoRotas() {
+  const cont = document.getElementById("historico-rotas");
+  if (!cont) return;
+  const hist = STATE.perfil.historicoRotas || [];
+  if (!hist.length) { cont.style.display = "none"; cont.innerHTML = ""; return; }
+  cont.style.display = "flex";
+  cont.innerHTML = hist.slice(0, 5).map((h, i) => `
+    <button type="button" class="chip-historico" onclick="usarRotaHistorico(${i})">
+      🕒 ${h.origem} → ${h.destino}
+    </button>`).join("");
+}
+
+function usarRotaHistorico(idx) {
+  const h = (STATE.perfil.historicoRotas || [])[idx];
+  if (!h) return;
+  selecionarOrigemManual();
+  const origInput = document.getElementById("inp-origem-livre");
+  const destInput = document.getElementById("inp-destino-livre");
+  if (origInput) origInput.value = h.origem;
+  if (destInput) destInput.value = h.destino;
   SOUNDS.click();
 }
 function fecharModalIrPara(e) {
@@ -825,7 +853,19 @@ async function iniciarRotaLivre() {
   }
   SOUNDS.click();
   const rota = await tracarRotaNaMapa(orig || STATE.perfil.cidade, dest, STATE.perfil.pais);
-  if (rota) NAV.iniciar(rota, dest, STATE._ultimaRota?.destCoord);
+  if (rota) {
+    _registrarHistoricoRota(orig || STATE.perfil.cidade, dest, rota);
+    NAV.iniciar(rota, dest, STATE._ultimaRota?.destCoord);
+  }
+}
+
+// Grava automaticamente a rota no histórico (mais recente primeiro, máximo 20) —
+// sem nenhuma ação do usuário, toda vez que uma navegação de verdade é iniciada.
+function _registrarHistoricoRota(origem, destino, rota) {
+  const hist = STATE.perfil.historicoRotas || (STATE.perfil.historicoRotas = []);
+  hist.unshift({ origem, destino, km: rota.km, min: rota.min, data: new Date().toISOString() });
+  STATE.perfil.historicoRotas = hist.slice(0, 20);
+  salvarPerfil();
 }
 
 // ---------- Alertas de combustível e parceiros ----------
