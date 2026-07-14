@@ -373,9 +373,18 @@ function atualizarDashboard() {
 
     // Mostra imediatamente o último status conhecido (ou uma estimativa simulada
     // enquanto o real não chega, pra tela nunca ficar vazia), e busca em segundo
-    // plano o status de trânsito real da TomTom pra essa rota específica
-    if (!STATE.statusAtual) STATE.statusAtual = TRAFFIC.getStatus(rota, origem);
-    _renderizarStatusRota(STATE.statusAtual, cardRotaEl);
+    // plano o status de trânsito real da TomTom pra essa rota específica.
+    // A estimativa simulada NUNCA mostra incidente/atraso — isso é só invenção
+    // da simulação por horário, não um dado real; o incidente só aparece quando
+    // o status real da TomTom confirmar que existe de fato (marcado sem `_simulado`).
+    if (!STATE.statusAtual) {
+      STATE.statusAtual = TRAFFIC.getStatus(rota, origem);
+      STATE.statusAtual._simulado = true;
+    }
+    const statusParaExibir = STATE.statusAtual._simulado
+      ? { ...STATE.statusAtual, incidente: null, _detalheIncidente: null }
+      : STATE.statusAtual;
+    _renderizarStatusRota(statusParaExibir, cardRotaEl);
 
     if (origem && destino) {
       _buscarStatusRotaReal(origem, destino).then(statusReal => {
@@ -618,10 +627,15 @@ function verIncidenteNoMapa() {
 }
 function pedirRotaAlternativa() {
   fecharModalIncidente();
-  const msgEl = document.getElementById("chat-input");
-  if (msgEl) msgEl.value = t("modal.incidente.perguntaAlternativa");
-  ativarTab("chat");
-  setTimeout(enviarMensagem, 300);
+  // Ativa de verdade a rota alternativa configurada pelo usuário (mesma usada
+  // pelo botão "Rota Alternativa" do dashboard) — antes isso só digitava uma
+  // pergunta fake no chat e não trocava rota nenhuma.
+  if (STATE.perfil.origemAlt && STATE.perfil.destinoAlt) {
+    usarRotaGravada("alternativa");
+    mostrarToast("🔀 Rota alternativa ativada");
+  } else {
+    mostrarToast("Configure uma rota alternativa em Configurações pra usar essa opção");
+  }
 }
 
 // ---------- Google Maps (redirecionar rota) ----------
@@ -1392,7 +1406,7 @@ const NAV = {
   velocidadeMediaKmh: 35,
   rotaAlternativaProposta: null,
   alertaAberto: false,
-  alertaJaMostrado: false,
+  _proximoAlertaPermitidoEm: 0, // timestamp (ms) — cooldown entre alertas, não "só uma vez por viagem"
   modoCamera: "seguir", // "seguir" | "fixo"
   _bearingMarcador: 0,
   _bearingCamera: 0,
@@ -1419,12 +1433,14 @@ const NAV = {
     this.velocidadeMediaKmh = (rota?.min > 0 && kmNum > 0) ? (kmNum / (rota.min / 60)) : 35;
     this.rotaAlternativaProposta = null;
     this.alertaAberto = false;
-    this.alertaJaMostrado = false;
+    this._proximoAlertaPermitidoEm = 0;
     this.modoCamera = "seguir";
     this._bearingMarcador = 0;
     this._bearingCamera = 0;
     this._ultimoIdxRota = null;
     this._entradaAnimando = false;
+    this._foraDaRotaContagem = 0;
+    this._recalculando = false;
 
     if (rota?.atrasoSegundos > 60) {
       mostrarToast(`🚦 Rota já considera ${Math.round(rota.atrasoSegundos/60)} min de trânsito atual`);
@@ -1592,6 +1608,20 @@ const NAV = {
     this.ultimaPos = pos;
     if (projecao && projecao.distanciaM <= 45) this._ultimoIdxRota = projecao.idx;
 
+    // Detecta desvio real da rota (o usuário errou uma saída ou escolheu ir por outro
+    // caminho de propósito) e recalcula sozinho — diferente do alerta de trânsito
+    // (que sempre pergunta antes de rotear), aqui a ação do próprio usuário já é a
+    // decisão, então não faz sentido perguntar de novo.
+    const LIMITE_FORA_ROTA_M = 60;
+    if (!projecao || projecao.distanciaM > LIMITE_FORA_ROTA_M) {
+      this._foraDaRotaContagem = (this._foraDaRotaContagem || 0) + 1;
+    } else {
+      this._foraDaRotaContagem = 0;
+    }
+    if (this._foraDaRotaContagem >= 3 && !this._recalculando) {
+      this._recalcularRotaAtual(lat, lon);
+    }
+
     // Parado ou andando muito devagar (ex: sinal fechado): mantém a direção atual em vez de
     // recalcular — é justamente aí que o pequeno ruído do GPS faz a "agulha de bússola" girar
     // sem o carro estar de fato se movendo.
@@ -1631,6 +1661,47 @@ const NAV = {
 
     this._atualizarPainel(this._distanciaRestante(pos, this.rotaCoords));
     this._atualizarInstrucao(this._distanciaPercorrida(pos, this.rotaCoords));
+  },
+
+  // Chamado quando o usuário se desvia da rota de propósito (ou erra uma saída) —
+  // recalcula sozinho a partir da posição atual até o mesmo destino, sem perguntar
+  // (diferente do alerta de trânsito, aqui o desvio já É a decisão do usuário).
+  async _recalcularRotaAtual(lat, lon) {
+    if (this._recalculando || !this.destCoord) return;
+    this._recalculando = true;
+    const elTexto = document.getElementById("nav-instrucao-texto");
+    const elDist  = document.getElementById("nav-instrucao-distancia");
+    if (elTexto) elTexto.textContent = "🔄 Recalculando rota...";
+    if (elDist)  elDist.textContent = "";
+    mostrarToast("🔄 Você saiu da rota — recalculando...");
+    try {
+      const veiculo    = STATE.perfil.veiculo;
+      const ehCaminhao = veiculo?.tipo === "caminhao";
+      const oCoord     = { lat, lon };
+      const rota = ehCaminhao
+        ? await _calcularRotaCaminhao(oCoord, this.destCoord, veiculo)
+        : await _calcularRotaCarro(oCoord, this.destCoord);
+      if (!rota) { mostrarToast("Não consegui recalcular a rota"); return; }
+
+      this.rotaCoords = rota.coords;
+      this.instrucoes = rota.instrucoes || null;
+      this._ultimoIdxRota = null;
+      this._foraDaRotaContagem = 0;
+      const kmNum = parseFloat(rota.km);
+      this.velocidadeMediaKmh = (rota.min > 0 && kmNum > 0) ? (kmNum / (rota.min / 60)) : this.velocidadeMediaKmh;
+
+      if (this.map && this.map.getSource("nav-rota")) {
+        this.map.getSource("nav-rota").setData({
+          type: "Feature",
+          geometry: { type: "LineString", coordinates: rota.coords.map(c => [c[1], c[0]]) }
+        });
+      }
+      mostrarToast("✅ Rota recalculada");
+    } catch(e) {
+      mostrarToast("Não consegui recalcular a rota");
+    } finally {
+      this._recalculando = false;
+    }
   },
 
   // Projeta um ponto na rota: acha o segmento mais próximo e o ponto exato sobre ele
@@ -1735,9 +1806,11 @@ const NAV = {
     this.marcador = null;
     this.ultimaPos = null;
     this.alertaAberto = false;
-    this.alertaJaMostrado = false;
+    this._proximoAlertaPermitidoEm = 0;
     this.modoCamera = "seguir";
     this.rotaAlternativaProposta = null;
+    this._foraDaRotaContagem = 0;
+    this._recalculando = false;
     const alertaDiv = document.getElementById("nav-alerta-transito");
     if (alertaDiv) alertaDiv.style.display = "none";
     const tela = document.getElementById("tela-navegacao");
@@ -1760,8 +1833,11 @@ const NAV = {
 
   async _avaliarTransitoAdiante() {
     if (!STATE.perfil.alertaTransito) return;
-    // Alerta de engarrafamento/rota alternativa: no máximo UMA vez por navegação
-    if (this.alertaJaMostrado || this.alertaAberto || !this.ultimaPos || !this.destCoord) return;
+    // Espera um tempo depois do último alerta antes de avaliar de novo — evita repetir
+    // o aviso a cada 60s pro MESMO engarrafamento ainda à frente, mas ainda permite
+    // avisar sobre um SEGUNDO engarrafamento diferente mais adiante na mesma viagem
+    // (antes ficava travado no primeiro aviso pro resto da viagem inteira).
+    if (Date.now() < this._proximoAlertaPermitidoEm || this.alertaAberto || !this.ultimaPos || !this.destCoord) return;
     const distKm = STATE.perfil.alertaTransitoDistanciaKm || 15;
     const segmento = this._segmentoAdiante(this.ultimaPos, this.rotaCoords, distKm);
     if (!segmento.length) return;
@@ -1789,13 +1865,13 @@ const NAV = {
     const tempoAtualMin  = (restanteAtualM / 1000) / velocidadeMediaKmh * 60 + (atrasoTotalSeg / 60);
     const economiaMin    = Math.round(tempoAtualMin - rotaAlt.min);
 
-    this.alertaJaMostrado = true; // não avisa de novo nesta navegação, seja qual for a decisão
-    if (economiaMin >= 3) {
-      this.rotaAlternativaProposta = rotaAlt;
-      this._mostrarAlertaTransito(atrasoTotalSeg, economiaMin, true);
-    } else {
-      this._mostrarAlertaTransito(atrasoTotalSeg, economiaMin, false);
-    }
+    // Cooldown de 5 min antes do próximo alerta possível (não bloqueia o resto da viagem)
+    this._proximoAlertaPermitidoEm = Date.now() + 5 * 60 * 1000;
+    // Sempre guarda a rota alternativa calculada e oferece a opção — quem decide se
+    // vale a pena é o usuário, o app só avisa a estimativa (nunca esconde a escolha
+    // só porque calculou que a economia é pequena)
+    this.rotaAlternativaProposta = rotaAlt;
+    this._mostrarAlertaTransito(atrasoTotalSeg, economiaMin, economiaMin >= 3);
   },
 
   // Pinta em vermelho tracejado, por cima da rota azul, os trechos com
@@ -1823,12 +1899,14 @@ const NAV = {
     const btnMudar = div?.querySelector("button:last-child");
     let msg;
     if (valeAPena) {
-      msg = `Atraso estimado de ${atrasoMin} min na sua rota. Uma rota alternativa economizaria cerca de ${economiaMin} min. Vale a pena mudar.`;
-      if (btnMudar) btnMudar.style.display = "";
+      msg = `Atraso estimado de ${atrasoMin} min na sua rota. Uma rota alternativa economizaria cerca de ${economiaMin} min.`;
+    } else if (economiaMin > 0) {
+      msg = `Atraso estimado de ${atrasoMin} min na sua rota. A rota alternativa economizaria só ${economiaMin} min — pode não valer muito a pena, mas a escolha é sua.`;
     } else {
-      msg = `Atraso estimado de ${atrasoMin} min na sua rota, mas a rota alternativa não compensa. Recomendo manter o trajeto atual.`;
-      if (btnMudar) btnMudar.style.display = "none";
+      msg = `Atraso estimado de ${atrasoMin} min na sua rota. Não achei uma rota alternativa melhor, mas você pode tentar mudar mesmo assim.`;
     }
+    // Sempre mostra a opção de trocar de rota — a decisão de valer a pena ou não é do usuário, não do app
+    if (btnMudar) btnMudar.style.display = "";
     if (texto) texto.textContent = msg;
     if (div) div.style.display = "block";
     const modoAudio = STATE.perfil.audioMode || "tudo";
