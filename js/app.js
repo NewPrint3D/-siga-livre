@@ -1424,6 +1424,7 @@ const NAV = {
     this._bearingMarcador = 0;
     this._bearingCamera = 0;
     this._ultimoIdxRota = null;
+    this._entradaAnimando = false;
 
     if (rota?.atrasoSegundos > 60) {
       mostrarToast(`🚦 Rota já considera ${Math.round(rota.atrasoSegundos/60)} min de trânsito atual`);
@@ -1443,10 +1444,12 @@ const NAV = {
     this.map = new maplibregl.Map({
       container: "nav-mapa-container",
       style: `https://api.tomtom.com/style/1/style/20.3.4-6?key=${TOMTOM_API_KEY}&map=basic_${estiloMapa}`,
+      // Começa afastado e "de cima" (visão geral) — depois do mapa carregar, aproxima
+      // e inclina até a câmera de navegação, igual à animação de início do Google Maps.
       center: [inicio[1], inicio[0]],
-      zoom: 17,
-      pitch: 60,
-      bearing: bearingInicial,
+      zoom: 14.5,
+      pitch: 0,
+      bearing: 0,
       attributionControl: false,
       dragRotate: false,       // sem rotação por arrastar com botão direito/ctrl
       pitchWithRotate: false,
@@ -1513,6 +1516,22 @@ const NAV = {
         .setLngLat([inicio[1], inicio[0]])
         .setRotation(bearingInicial)
         .addTo(this.map);
+
+      // Aproxima e inclina a câmera até a posição do veículo (efeito "start navigation" do Google Maps)
+      this._arrastandoPrograma = true;
+      this._entradaAnimando = true;
+      this.map.flyTo({
+        center: [inicio[1], inicio[0]],
+        zoom: 17,
+        pitch: 60,
+        bearing: bearingInicial,
+        duration: 2000,
+        essential: true
+      });
+      setTimeout(() => {
+        this._arrastandoPrograma = false;
+        this._entradaAnimando = false;
+      }, 2100);
     });
 
     this._ligarGPS();
@@ -1598,8 +1617,10 @@ const NAV = {
     }
     if (this.marcador) { this.marcador.setLngLat([pos[1], pos[0]]); this.marcador.setRotation(this._bearingMarcador); }
 
-    // Câmera: só reorienta se a diferença for maior que 5°, e só no modo "seguir"
-    if (this.modoCamera === "seguir" && this.map) {
+    // Câmera: só reorienta se a diferença for maior que 5°, e só no modo "seguir".
+    // Ignora enquanto a animação inicial de aproximação ainda estiver rodando,
+    // pra não cortar ela no meio com uma leitura de GPS chegando cedo.
+    if (this.modoCamera === "seguir" && this.map && !this._entradaAnimando) {
       if (Math.abs(this._diffAngular(this._bearingCamera, bearingAlvo)) > 5) {
         this._bearingCamera = bearingAlvo;
       }
