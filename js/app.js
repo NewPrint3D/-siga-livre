@@ -1398,34 +1398,13 @@ const NAV = {
   _bearingCamera: 0,
   _arrastandoPrograma: false,
 
-  // Ícone do veículo visto de cima (não emoji) — "frente" aponta pra cima (0°)
+  // Ícone do veículo visto de cima — imagem 3D renderizada (não SVG achatado),
+  // "frente" aponta pra cima (0°) igual antes, só troca o visual pelo render real.
   _svgVeiculo() {
     const ehCaminhao = STATE.perfil.veiculo?.tipo === "caminhao";
-    if (ehCaminhao) {
-      return `<svg width="26" height="58" viewBox="0 0 26 58" xmlns="http://www.w3.org/2000/svg">
-        <!-- cabine (frente, aponta pra cima) -->
-        <rect x="4" y="0" width="18" height="16" rx="4" fill="#ffb300" stroke="#5c3d00" stroke-width="1.4"/>
-        <path d="M7,3 L19,3 L17,11 L9,11 Z" fill="#5c3d00" opacity="0.55"/>
-        <circle cx="8" cy="2.5" r="1.1" fill="#fff" opacity="0.8"/>
-        <circle cx="18" cy="2.5" r="1.1" fill="#fff" opacity="0.8"/>
-        <!-- carreta -->
-        <rect x="1" y="18" width="24" height="38" rx="3" fill="#e0e0e0" stroke="#555" stroke-width="1.4"/>
-        <line x1="1" y1="29" x2="25" y2="29" stroke="#999" stroke-width="1"/>
-        <line x1="1" y1="41" x2="25" y2="41" stroke="#999" stroke-width="1"/>
-      </svg>`;
-    }
-    return `<svg width="26" height="44" viewBox="0 0 26 44" xmlns="http://www.w3.org/2000/svg">
-      <!-- corpo (frente aponta pra cima) -->
-      <rect x="1" y="1" width="24" height="42" rx="10" fill="#2196f3" stroke="#0a3d62" stroke-width="1.6"/>
-      <!-- retrovisores -->
-      <rect x="-1" y="13" width="4" height="6" rx="1.6" fill="#0a3d62"/>
-      <rect x="23" y="13" width="4" height="6" rx="1.6" fill="#0a3d62"/>
-      <!-- vidro/teto: mais largo atrás, estreito na frente -->
-      <path d="M8,9 L18,9 L16,25 L10,25 Z" fill="#0a3d62" opacity="0.7"/>
-      <!-- faróis -->
-      <circle cx="8.5" cy="4.5" r="1.5" fill="#fff" opacity="0.85"/>
-      <circle cx="17.5" cy="4.5" r="1.5" fill="#fff" opacity="0.85"/>
-    </svg>`;
+    const src = ehCaminhao ? "assets/caminhao-3d-nav.webp" : "assets/carro-3d-nav.webp";
+    const largura = ehCaminhao ? 28 : 26;
+    return `<img src="${src}" width="${largura}" style="display:block;height:auto;" alt="">`;
   },
 
   iniciar(rota, destino, destCoord) {
